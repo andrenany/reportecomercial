@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ADL · Reglas del análisis</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --adl-navy: #003E6D;
+  --adl-navy-deep: #002844;
+  --adl-navy-soft: #1A5F8A;
+  --adl-orange: #F37021;
+  --adl-orange-soft: #FF8A3D;
+  --adl-teal: #0A8F9C;
+  --adl-sand: #F7F1E8;
+  --adl-sky: #E8F1F7;
+  --ink: #0F2A40;
+  --muted: #5B738B;
+  --line: #D7E3EE;
+  --bg: #EEF3F8;
+  --panel: rgba(255,255,255,.92);
+  --ok: #2F9E71;
+  --warn: #E8A317;
+  --danger: #D64545;
+  --info: #3E7CB1;
+  --shadow: 0 12px 36px rgba(0,42,74,.08);
+  --shadow-soft: 0 4px 16px rgba(0,62,109,.05);
+  --radius: 18px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(900px 420px at -5% -10%, rgba(243,112,33,.16), transparent 55%),
+    radial-gradient(800px 380px at 105% 0%, rgba(10,143,156,.14), transparent 50%),
+    radial-gradient(700px 360px at 50% 110%, rgba(0,62,109,.08), transparent 55%),
+    linear-gradient(180deg, #F7FAFC 0%, var(--bg) 40%, #E8EEF4 100%);
+  min-height: 100vh;
+}
+.wrap { max-width: 1420px; margin: 0 auto; padding: 18px 18px 56px; }
+.topnav {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; margin-bottom: 14px;
+  background: linear-gradient(135deg, #fff 0%, var(--adl-sky) 100%);
+  border: 1px solid rgba(215,227,238,.9); border-radius: 20px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+.brand-row { display: flex; align-items: center; gap: 12px; }
+.brand-row img { height: 54px; width: auto; display: block; filter: drop-shadow(0 2px 6px rgba(0,62,109,.08)); }
+.brand-text { font-family: Manrope, sans-serif; font-weight: 800; font-size: 1.08rem; color: var(--adl-navy); line-height: 1.15; }
+.brand-text span { color: var(--adl-orange); }
+.nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+.nav-links a {
+  text-decoration: none; font-size: .85rem; font-weight: 700;
+  padding: 9px 14px; border-radius: 999px; color: var(--adl-navy);
+  background: rgba(255,255,255,.75); border: 1px solid var(--line);
+  transition: all .18s ease;
+}
+.nav-links a:hover { border-color: var(--adl-orange); color: var(--adl-orange); transform: translateY(-1px); }
+.nav-links a.active {
+  background: linear-gradient(135deg, var(--adl-navy), var(--adl-navy-soft));
+  color: #fff; border-color: transparent;
+  box-shadow: 0 8px 18px rgba(0,62,109,.22);
+}
+.hero-mini {
+  color: var(--muted); font-size: .92rem; margin: 0 4px 14px; line-height: 1.45;
+  padding: 10px 14px; border-radius: 14px;
+  background: linear-gradient(90deg, rgba(255,255,255,.7), rgba(232,241,247,.55));
+  border: 1px solid rgba(215,227,238,.7);
+}
+.hero-mini strong { color: var(--adl-navy); }
+
+.filters {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+  padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 40;
+  overflow: visible;
+}
+.filters-top {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: end;
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+label.f { display: flex; flex-direction: column; gap: 5px; font-size: .7rem; color: var(--muted); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; min-width: 130px; flex: 1; }
+select {
+  appearance: none;
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 34px 10px 12px;
+  font: inherit; color: var(--ink); background: #fff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%005B738B' d='M0 0l6 8 6-8z'/%3E%3C/svg%3E")
+    right 12px center / 10px no-repeat;
+  transition: border-color .18s, box-shadow .18s, transform .18s;
+}
+select:hover, select:focus { border-color: var(--adl-orange); outline: none; box-shadow: 0 0 0 3px rgba(243,112,33,.16); }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.chip-label { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-right: 4px; }
+.chip {
+  border: 1px solid var(--line); background: #fff; color: var(--ink);
+  border-radius: 999px; padding: 8px 14px; font-weight: 700; font-size: .82rem;
+  cursor: pointer; transition: all .18s ease;
+}
+.chip:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(0,62,109,.1); }
+.chip.on { color: #fff; border-color: transparent; box-shadow: 0 8px 16px rgba(0,62,109,.18); }
+.chip[data-tipo="SDG"].on { background: linear-gradient(135deg,#003E6D,#1A5F8A); }
+.chip[data-tipo="PVE"].on { background: linear-gradient(135deg,#F37021,#FF8A3D); }
+.chip[data-tipo="SCR"].on { background: linear-gradient(135deg,#0A8F9C,#14B0BE); }
+.chip[data-tipo="CAP"].on { background: linear-gradient(135deg,#E8A317,#F0BD4A); }
+.chip[data-tipo="ATV"].on { background: linear-gradient(135deg,#1F6F8B,#2A8AA8); }
+.chip[data-tipo="OTROS"].on { background: linear-gradient(135deg,#7A92A8,#95A9BB); }
+.chip[data-tipo="ALL"].on { background: linear-gradient(135deg,#003E6D,#0A8F9C); }
+.actions { display: flex; gap: 8px; margin-left: auto; }
+.btn {
+  border: 0; border-radius: 12px; padding: 10px 14px; font: inherit; font-weight: 700;
+  cursor: pointer; transition: transform .15s, box-shadow .15s;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn.primary { background: linear-gradient(135deg,var(--adl-orange),var(--adl-orange-soft)); color: #fff; box-shadow: 0 8px 16px rgba(243,112,33,.25); }
+.btn.ghost { background: #fff; color: var(--adl-navy); border: 1px solid var(--line); }
+
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; position: relative; z-index: 1; }
+@media (max-width: 980px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+.kpi {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px 16px 14px; box-shadow: var(--shadow-soft);
+  transition: transform .2s ease, box-shadow .2s ease;
+  position: relative; overflow: hidden;
+}
+.kpi::before {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+  background: linear-gradient(180deg, var(--adl-navy), var(--adl-teal));
+}
+.kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.kpi .label { color: var(--muted); font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.kpi .value { font-family: Manrope, sans-serif; font-weight: 800; font-size: 1.38rem; margin-top: 6px; color: var(--adl-navy); letter-spacing: -.02em; }
+.kpi .hint { color: var(--muted); font-size: .76rem; margin-top: 4px; }
+.kpi.accent::before { background: linear-gradient(180deg, var(--adl-orange), #FFB07A); }
+.kpi.navy::before { background: linear-gradient(180deg, var(--adl-navy), var(--adl-navy-soft)); }
+.kpi.ok::before { background: linear-gradient(180deg, var(--ok), #5BC49A); }
+.kpi.warn::before { background: linear-gradient(180deg, var(--warn), #F0BD4A); }
+.kpi.info::before { background: linear-gradient(180deg, var(--info), #6BA3D0); }
+.kpi.teal::before { background: linear-gradient(180deg, var(--adl-teal), #3BC4D0); }
+.kpi.danger::before { background: linear-gradient(180deg, var(--danger), #F07171); }
+.kpi.accent, .kpi.navy, .kpi.ok, .kpi.warn, .kpi.info, .kpi.teal, .kpi.danger { border-top: 0; }
+
+.tabs { display: flex; gap: 8px; margin: 16px 0 0; flex-wrap: wrap; }
+.tabs button {
+  border: 1px solid var(--line); background: rgba(255,255,255,.85); border-radius: 999px;
+  padding: 9px 16px; font-weight: 700; color: var(--adl-navy); cursor: pointer;
+  transition: all .18s ease;
+}
+.tabs button:hover { border-color: var(--adl-teal); color: var(--adl-teal); }
+.tabs button.active {
+  background: linear-gradient(135deg, var(--adl-navy), var(--adl-teal));
+  color: #fff; border-color: transparent;
+  box-shadow: 0 8px 18px rgba(0,62,109,.2);
+}
+.section { display: none; margin-top: 14px; animation: fade .28s ease; }
+.section.active { display: block; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px);} to { opacity:1; transform:none;} }
+
+.grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 14px; }
+@media (max-width: 980px) { .grid, .grid3 { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(8px);
+  transition: box-shadow .2s ease;
+}
+.panel:hover { box-shadow: var(--shadow); }
+.panel h2 { margin: 0 0 2px; font-family: Manrope, sans-serif; font-size: 1.02rem; color: var(--adl-navy); }
+.panel p.desc { margin: 0 0 10px; color: var(--muted); font-size: .82rem; }
+.chart-box { position: relative; height: 310px; }
+.chart-box.sm { height: 270px; }
+.chart-box.tall { height: 400px; }
+table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+th, td { text-align: left; padding: 9px 7px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; position: sticky; top: 0; background: #fff; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll { overflow: auto; max-height: 440px; border-radius: 12px; }
+.badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; }
+.b-pend { background: #EAF0F6; color: var(--adl-navy); }
+.b-listo { background: #D9EAF8; color: #1D4E89; }
+.b-ok { background: #D8F3E6; color: #1B7A52; }
+.b-sinoc { background: #FFE8D6; color: #9A3412; }
+.b-anul { background: #FDE2E2; color: #9B1C1C; }
+.b-rapido { background: #D8F3E6; color: #1B7A52; }
+.b-normal { background: #D9EAF8; color: #1D4E89; }
+.b-lento { background: #FFF3CD; color: #8A6D1D; }
+.b-critico { background: #FDE2E2; color: #9B1C1C; }
+.rule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 900px) { .rule-grid { grid-template-columns: 1fr; } }
+.swatch { display:inline-block; width:14px; height:14px; border-radius:4px; margin-right:6px; vertical-align:middle; }
+.cmp-note { font-size:.84rem; color:var(--muted); margin:0 0 12px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.65); border:1px solid var(--line); }
+footer { margin-top: 22px; text-align: center; color: var(--muted); font-size: .78rem; }
+
+.filters .hint-multi {
+  font-size: .72rem; color: var(--muted); margin: 0 0 10px; line-height: 1.35;
+}
+.filters-top label.f { min-width: 150px; position: relative; z-index: 1; overflow: visible; }
+.msel {
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+.msel.open { z-index: 80; }
+.msel-btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 34px 10px 12px;
+  font: inherit;
+  color: var(--ink);
+  background: #fff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%005B738B' d='M0 0l6 8 6-8z'/%3E%3C/svg%3E")
+    right 12px center / 10px no-repeat;
+  cursor: pointer;
+  transition: border-color .18s, box-shadow .18s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msel.open .msel-btn,
+.msel-btn:hover, .msel-btn:focus {
+  border-color: var(--adl-orange);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(243,112,33,.16);
+}
+.msel-btn.has-sel { font-weight: 600; color: var(--adl-navy); }
+.msel-panel {
+  display: none;
+  position: absolute;
+  z-index: 90;
+  left: 0; right: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 14px 32px rgba(0,42,74,.22);
+  padding: 8px;
+  min-width: 260px;
+}
+.msel.open .msel-panel { display: block; }
+.msel-q {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+.msel-q:focus {
+  border-color: var(--adl-teal, #0A8F9C);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(10,143,156,.18);
+}
+.msel-opts {
+  max-height: 200px;
+  overflow: auto;
+}
+.msel-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: .86rem;
+  color: var(--ink);
+}
+.msel-opt:hover { background: #F0F6FA; }
+.msel-opt.on { background: rgba(10,143,156,.12); font-weight: 600; }
+.msel-opt input { margin-top: 2px; accent-color: var(--adl-navy); flex-shrink: 0; }
+.msel-opt span { line-height: 1.3; word-break: break-word; }
+.msel-empty {
+  padding: 10px 8px;
+  color: var(--muted);
+  font-size: .82rem;
+}
+.msel-foot {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.msel-foot button {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--adl-navy);
+  cursor: pointer;
+}
+.msel-foot button:hover { border-color: var(--adl-orange); color: var(--adl-orange); }
+
+.panel-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:6px; }
+.panel-head .titles { min-width:0; flex:1; }
+.panel-tools { display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; }
+.panel-tools button {
+  border:1px solid var(--line); background:#fff; color:var(--adl-navy);
+  border-radius:999px; padding:6px 11px; font-size:.72rem; font-weight:700; cursor:pointer;
+  transition: all .15s ease;
+}
+.panel-tools button:hover { border-color: var(--adl-orange); color: var(--adl-orange); }
+.panel-tools button.on { background: linear-gradient(135deg, var(--adl-navy), #0A8F9C); color:#fff; border-color: transparent; }
+.panel-tools button.copied { background: var(--ok); color:#fff; border-color: var(--ok); }
+.chart-box {
+  position: relative;
+  background: linear-gradient(165deg, #ffffff 0%, #f3f7fb 100%);
+  border-radius: 14px;
+  padding: 10px 8px 6px;
+  border: 1px solid rgba(215,227,238,.95);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.9),
+    0 8px 20px rgba(0,62,109,.08),
+    0 2px 4px rgba(0,42,74,.04);
+}
+.chart-table-wrap { display:none; overflow:auto; max-height:360px; margin-top:6px; }
+.chart-table-wrap.show { display:block; }
+.chart-table-wrap table { font-size:.8rem; }
+.toast {
+  position:fixed; bottom:18px; right:18px; background:var(--adl-navy); color:#fff;
+  padding:10px 14px; border-radius:10px; font-size:.85rem; font-weight:600;
+  opacity:0; transform:translateY(8px); transition:.2s; z-index:50; pointer-events:none;
+}
+.toast.show { opacity:1; transform:none; }
+.hero-mini { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  
+    <div class="topnav">
+      <div class="brand-row">
+        <img src="logo_adl.png" alt="ADL Diagnostic Chile" />
+        <div class="brand-text">Dashboard <span>Facturación</span></div>
+      </div>
+      <div class="nav-links">
+        <a class="" href="dashboard_facturacion.html">Unificado</a>
+        <a class="" href="dashboard_facturacion_excel.html">Solo facturación</a>
+        <a class="active" href="reglas.html">Reglas</a>
+      </div>
+    </div>
+    
+  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-08-20 09:51</p>
+  <div class="rule-grid">
+    <div class="panel">
+      <h2>Fuentes (solo lectura)</h2>
+      <ul style="color:var(--muted);line-height:1.5">
+        <li><strong>Registro comercial (archivo OC)</strong> → hoja de control de ventas/casos</li>
+        <li><strong>Facturación consolidada 2026</strong> → KR Resumen Consolidado + Tablas Auxiliares</li>
+        <li><strong>PROGRAMAS.xlsx</strong> → clasifica tipo de ingreso (SDG / PVE / SCR / Cap., etc.)</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h2>Fecha de venta (sin duplicar)</h2>
+      <ul style="color:var(--muted);line-height:1.5">
+        <li>Con OC: fecha = Fecha del registro comercial</li>
+        <li>Sin OC: mes/año = Facturación consolidada</li>
+        <li>Anuladas (rojo/naranja) no suman</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h2>Tipos de ingreso (PROGRAMAS.xlsx)</h2>
+      <ul style="color:var(--muted);line-height:1.55;list-style:none;padding-left:0"><li><span class='swatch' style='background:#003E6D'></span><strong>SDG</strong> — SDG · Servicios Diagnósticos</li><li><span class='swatch' style='background:#F37021'></span><strong>PVE</strong> — PVE · Programas / Vigilancia</li><li><span class='swatch' style='background:#0A8F9C'></span><strong>SCR</strong> — SCR · Screening</li><li><span class='swatch' style='background:#E8A317'></span><strong>CAP</strong> — Capacitación</li><li><span class='swatch' style='background:#1F6F8B'></span><strong>ATV</strong> — ATV · Asistencia técnica</li></ul>
+    </div>
+    <div class="panel">
+      <h2>Estados del registro comercial</h2>
+      <ul style="color:var(--muted);line-height:1.5">
+        <li>Sin color → <strong>Falta OC/HES</strong> (aún no se puede facturar)</li>
+        <li>Azul → <strong>Listo para facturar</strong> (tiene OC y HES)</li>
+        <li>Verde → <strong>Ya facturada</strong></li>
+        <li>Rojo / naranja → <strong>Anulada</strong></li>
+        <li>El archivo fuente se llama “pendientes”, pero incluye todo el ciclo (también facturado)</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h2>Ciclo y categorías</h2>
+      <ul style="color:var(--muted);line-height:1.5">
+        <li>Días = Fecha prefactura → Fecha factura (OC)</li>
+        <li>Rápido ≤30 · Normal 31–60 · Lento 61–90 · Crítico &gt;90</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h2>Empresas sin OC</h2>
+      <ul style="color:var(--muted);line-height:1.5"><li><strong>AQUAGEN</strong> <span style='color:#627D98'>(AQUAGEN CHILE S.A.)</span></li><li><strong>SALMONIFERA DALCAHUE</strong> <span style='color:#627D98'>(CIA. SALMONIFERA DALCAHUE)</span></li><li><strong>SASA</strong> <span style='color:#627D98'>(SALMONES ANTARTICA  S.A.)</span></li><li><strong>NALCAHUE</strong> <span style='color:#627D98'>(ACUICOLA E INVERS NALCAHUE LTD)</span></li><li><strong>THE CHALLENGE ROOM</strong> <span style='color:#627D98'>(THE CHALLENGE ROOM SPA)</span></li><li><strong>BAJA TROUT</strong> <span style='color:#627D98'>(BAJA TROUT SA)</span></li><li><strong>CODEBREAKER</strong> <span style='color:#627D98'>(CODEBREAKER BIOSCIENCE SPA)</span></li></ul>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:12px; border-top: 3px solid #D64545;">
+    <h2>Exclusiones del análisis</h2>
+    <ul style="color:var(--muted);line-height:1.55">
+      <li><strong>Medio Ambiente</strong>: registros cuyo programa contenga “Medio Ambiente” quedan fuera.</li>
+      <li><strong>I+D / Investigación</strong>: tipo de ingreso I+D queda fuera.</li>
+      <li><strong>Sede “No corresponde”</strong>: ventas de otro sector de la empresa; no se incluyen en KPIs, gráficos ni detalle.</li>
+      <li>Estas exclusiones aplican al dashboard unificado y al de solo facturación.</li>
+    </ul>
+  </div>
+
+  <div class="panel" style="margin-top:12px">
+    <h2>Indicadores</h2>
+    <ul style="color:var(--muted);line-height:1.5">
+      <li><strong>Unificado</strong>: combina registro comercial + facturación sin OC.</li>
+      <li><strong>Solo facturación</strong>: únicamente el Excel de Facturación consolidada (KR Resumen).</li>
+      <li>En ambos, cada gráfico tiene botones <em>Gráfico / Tabla / Copiar</em>.</li>
+      <li><strong>Promedio por documento</strong> = monto total filtrado ÷ cantidad de documentos.</li>
+    </ul>
+  </div>
+  <footer>ADL Diagnostic Chile · página de reglas</footer>
+</div>
+</body>
+</html>

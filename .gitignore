@@ -1,0 +1,19 @@
+# secretos / local
+sql_config.local.json
+.env
+.env.*
+
+# generados / cache
+__pycache__/
+*.pyc
+*.log
+enlace_dashboard.txt
+servidor_red.log
+
+# CSV intermedios (se regeneran)
+*.csv
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
