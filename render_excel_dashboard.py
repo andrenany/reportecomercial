@@ -23,6 +23,7 @@ def render_dashboard_excel(payload: dict, css: str, nav_html: str, tipo_color: d
 <title>ADL · Facturación (gráficos Excel)</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="auth.js"></script>
 <style>{css}
 .cmp-note {{ font-size:.82rem; color:var(--muted); margin:0 0 10px; }}
 </style>

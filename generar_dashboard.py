@@ -673,6 +673,7 @@ def _nav(active: str) -> str:
         <a class="{cls('excel')}" href="dashboard_facturacion_excel.html">Solo facturación</a>
         <a class="{cls('reglas')}" href="reglas.html">Reglas</a>
         <button type="button" class="btn-mail" onclick="solicitarActualizacion(this)">Solicitar actualización</button>
+        <button type="button" class="chip" style="border-radius:999px;padding:9px 14px" onclick="adlLogout()">Salir</button>
       </div>
     </div>
     """
@@ -702,6 +703,7 @@ def render_dashboard(payload: dict) -> str:
 <title>ADL · Dashboard Facturación</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="auth.js"></script>
 <style>{CSS}</style>
 </head>
 <body>
@@ -1191,6 +1193,7 @@ def render_reglas(generado: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ADL · Reglas del análisis</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="auth.js"></script>
 <style>{CSS}</style>
 </head>
 <body>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ADL · Acceso reporte comercial</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy: #003E6D;
+      --orange: #F37021;
+      --bg: #E8F0F6;
+      --ink: #102A43;
+      --muted: #627D98;
+      --line: #D7E3EE;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      color: var(--ink);
+      display: grid; place-items: center;
+      background:
+        radial-gradient(700px 360px at 0% 0%, rgba(243,112,33,.18), transparent 55%),
+        radial-gradient(700px 360px at 100% 0%, rgba(10,143,156,.14), transparent 50%),
+        linear-gradient(180deg, #F7FAFC, var(--bg));
+      padding: 20px;
+    }
+    .card {
+      width: min(420px, 100%);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 28px 24px 22px;
+      box-shadow: 0 16px 40px rgba(0,42,74,.12);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .brand img { height: 48px; }
+    .brand h1 {
+      margin: 0; font-family: Manrope, sans-serif; font-size: 1.15rem;
+      color: var(--navy); line-height: 1.2;
+    }
+    .brand h1 span { color: var(--orange); }
+    label {
+      display: block; font-size: .72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em;
+      color: var(--muted); margin: 12px 0 6px;
+    }
+    input {
+      width: 100%; border: 1px solid var(--line); border-radius: 12px;
+      padding: 12px 14px; font: inherit; color: var(--ink);
+    }
+    input:focus {
+      outline: none; border-color: var(--orange);
+      box-shadow: 0 0 0 3px rgba(243,112,33,.18);
+    }
+    button {
+      width: 100%; margin-top: 18px; border: 0; border-radius: 12px;
+      padding: 12px 14px; font: inherit; font-weight: 700; cursor: pointer;
+      color: #fff;
+      background: linear-gradient(135deg, var(--navy), #0A8F9C);
+      box-shadow: 0 8px 18px rgba(0,62,109,.22);
+    }
+    button:hover { filter: brightness(1.05); }
+    .err {
+      display: none; margin-top: 12px; padding: 10px 12px;
+      border-radius: 10px; background: #FDE2E2; color: #9B1C1C;
+      font-size: .86rem; font-weight: 600;
+    }
+    .err.show { display: block; }
+    .hint { margin: 14px 0 0; font-size: .78rem; color: var(--muted); text-align: center; }
+  </style>
+</head>
+<body>
+  <form class="card" id="form" autocomplete="on">
+    <div class="brand">
+      <img src="logo_adl.png" alt="ADL" />
+      <h1>Reporte <span>comercial</span></h1>
+    </div>
+    <label for="user">Usuario</label>
+    <input id="user" name="username" required autocomplete="username" />
+    <label for="pass">Contraseña</label>
+    <input id="pass" name="password" type="password" required autocomplete="current-password" />
+    <button type="submit">Entrar</button>
+    <div class="err" id="err">Usuario o contraseña incorrectos</div>
+    <p class="hint">Acceso interno ADL Diagnostic</p>
+  </form>
+  <script src="auth.js"></script>
+  <script>
+    if (adlSession()) {
+      const q = new URLSearchParams(location.search).get("next");
+      location.replace(q || "dashboard_facturacion.html");
+    }
+    document.getElementById("form").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const user = document.getElementById("user").value;
+      const pass = document.getElementById("pass").value;
+      const ok = await adlTryLogin(user, pass);
+      const err = document.getElementById("err");
+      if (!ok) {
+        err.classList.add("show");
+        return;
+      }
+      err.classList.remove("show");
+      const q = new URLSearchParams(location.search).get("next");
+      location.replace(q || "dashboard_facturacion.html");
+    });
+  </script>
+</body>
+</html>
