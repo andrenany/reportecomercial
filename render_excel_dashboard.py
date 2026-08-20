@@ -107,7 +107,12 @@ def render_dashboard_excel(payload: dict, css: str, nav_html: str, tipo_color: d
       </div>
     </div>
   </section>
-  <footer>ADL Diagnostic Chile · gráficos estilo Excel Facturación · <span id="gen"></span></footer>
+  <footer>
+    ADL Diagnostic Chile · gráficos estilo Excel Facturación · <span id="gen"></span>
+    <div>
+      <button type="button" class="btn-mail-foot" onclick="solicitarActualizacion(this)">Solicitar actualización por correo</button>
+    </div>
+  </footer>
 </div>
 <script>
 const RAW = {data};
@@ -450,6 +455,39 @@ document.getElementById('btn-reset').addEventListener('click', () => {{
 fillFilters();
 document.getElementById('gen').textContent = RAW.generado;
 refresh();
+</script>
+<script>
+async function solicitarActualizacion(btn) {{
+  const el = btn || document.querySelector('.btn-mail, .btn-mail-foot');
+  const prev = el ? el.textContent : '';
+  if (el) {{ el.disabled = true; el.textContent = 'Enviando…'; }}
+  try {{
+    const res = await fetch('https://formsubmit.co/ajax/faraujo@adldiagnostic.cl', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json', 'Accept': 'application/json' }},
+      body: JSON.stringify({{
+        _subject: 'Solicitud de actualizacion - Dashboard Facturacion ADL',
+        _template: 'table',
+        _captcha: 'false',
+        mensaje: 'Solicito actualizar el dashboard de facturacion / reporte comercial.',
+        pagina: window.location.href,
+        fecha: new Date().toLocaleString('es-CL')
+      }})
+    }});
+    const data = await res.json().catch(() => ({{}}));
+    if (!res.ok) throw new Error(data.message || 'No se pudo enviar');
+    if (typeof showToast === 'function') showToast('Solicitud enviada a faraujo@adldiagnostic.cl');
+    else alert('Solicitud enviada a faraujo@adldiagnostic.cl');
+    if (el) el.textContent = 'Enviado';
+  }} catch (err) {{
+    console.error(err);
+    if (typeof showToast === 'function') showToast('Error al enviar. Intenta de nuevo.');
+    else alert('Error al enviar. Si es la primera vez, Fanny debe confirmar el correo de FormSubmit.');
+    if (el) el.textContent = prev || 'Solicitar actualización';
+  }} finally {{
+    if (el) setTimeout(() => {{ el.disabled = false; if (el.textContent === 'Enviado') el.textContent = prev || 'Solicitar actualización'; }}, 2500);
+  }}
+}}
 </script>
 </body>
 </html>

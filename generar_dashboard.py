@@ -453,6 +453,38 @@ body {
   color: #fff; border-color: transparent;
   box-shadow: 0 8px 18px rgba(0,62,109,.22);
 }
+.nav-links a.btn-mail,
+.nav-links button.btn-mail {
+  background: linear-gradient(135deg, var(--adl-orange), #FF8A3D);
+  color: #fff; border-color: transparent;
+  box-shadow: 0 6px 14px rgba(243,112,33,.28);
+  font: inherit; font-size: .85rem; font-weight: 700;
+  padding: 9px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid transparent;
+  transition: all .18s ease;
+}
+.nav-links a.btn-mail:hover,
+.nav-links button.btn-mail:hover {
+  color: #fff; filter: brightness(1.05);
+  border-color: transparent; transform: translateY(-1px);
+}
+.nav-links button.btn-mail:disabled {
+  opacity: .7; cursor: wait; transform: none;
+}
+footer { margin-top: 22px; text-align: center; color: var(--muted); font-size: .78rem; }
+footer a.btn-mail-foot,
+footer button.btn-mail-foot {
+  display: inline-block; margin-top: 10px;
+  text-decoration: none; font-weight: 700; font-size: .82rem;
+  padding: 10px 16px; border-radius: 999px; color: #fff;
+  background: linear-gradient(135deg, var(--adl-orange), #FF8A3D);
+  box-shadow: 0 6px 14px rgba(243,112,33,.25);
+  border: 0; cursor: pointer; font: inherit;
+}
+footer a.btn-mail-foot:hover,
+footer button.btn-mail-foot:hover { filter: brightness(1.05); }
+footer button.btn-mail-foot:disabled { opacity: .7; cursor: wait; }
+
 .hero-mini {
   color: var(--muted); font-size: .92rem; margin: 0 4px 14px; line-height: 1.45;
   padding: 10px 14px; border-radius: 14px;
@@ -585,8 +617,46 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .rule-grid { grid-template-columns: 1fr; } }
 .swatch { display:inline-block; width:14px; height:14px; border-radius:4px; margin-right:6px; vertical-align:middle; }
 .cmp-note { font-size:.84rem; color:var(--muted); margin:0 0 12px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.65); border:1px solid var(--line); }
-footer { margin-top: 22px; text-align: center; color: var(--muted); font-size: .78rem; }
 """ + CSS_CHART_TOOLS
+
+
+def _mail_js() -> str:
+    """Envío automático vía FormSubmit (sin abrir Outlook)."""
+    return r"""
+<script>
+async function solicitarActualizacion(btn) {
+  const el = btn || document.querySelector('.btn-mail, .btn-mail-foot');
+  const prev = el ? el.textContent : '';
+  if (el) { el.disabled = true; el.textContent = 'Enviando…'; }
+  try {
+    const res = await fetch('https://formsubmit.co/ajax/faraujo@adldiagnostic.cl', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        _subject: 'Solicitud de actualizacion - Dashboard Facturacion ADL',
+        _template: 'table',
+        _captcha: 'false',
+        mensaje: 'Solicito actualizar el dashboard de facturacion / reporte comercial.',
+        pagina: window.location.href,
+        fecha: new Date().toLocaleString('es-CL')
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'No se pudo enviar');
+    if (typeof showToast === 'function') showToast('Solicitud enviada a faraujo@adldiagnostic.cl');
+    else alert('Solicitud enviada a faraujo@adldiagnostic.cl');
+    if (el) el.textContent = 'Enviado';
+  } catch (err) {
+    console.error(err);
+    if (typeof showToast === 'function') showToast('Error al enviar. Intenta de nuevo.');
+    else alert('Error al enviar. Si es la primera vez, Fanny debe confirmar el correo de FormSubmit.');
+    if (el) el.textContent = prev || 'Solicitar actualización';
+  } finally {
+    if (el) setTimeout(() => { el.disabled = false; if (el.textContent === 'Enviado') el.textContent = prev || 'Solicitar actualización'; }, 2500);
+  }
+}
+</script>
+"""
 
 
 def _nav(active: str) -> str:
@@ -602,8 +672,21 @@ def _nav(active: str) -> str:
         <a class="{cls('dash')}" href="dashboard_facturacion.html">Unificado</a>
         <a class="{cls('excel')}" href="dashboard_facturacion_excel.html">Solo facturación</a>
         <a class="{cls('reglas')}" href="reglas.html">Reglas</a>
+        <button type="button" class="btn-mail" onclick="solicitarActualizacion(this)">Solicitar actualización</button>
       </div>
     </div>
+    """
+
+
+def _footer(extra: str = "") -> str:
+    extra_html = f" · {extra}" if extra else ""
+    return f"""
+  <footer>
+    ADL Diagnostic Chile{extra_html}
+    <div>
+      <button type="button" class="btn-mail-foot" onclick="solicitarActualizacion(this)">Solicitar actualización por correo</button>
+    </div>
+  </footer>
     """
 
 
@@ -719,7 +802,7 @@ def render_dashboard(payload: dict) -> str:
       </div>
   </section>
 
-  <footer>ADL Diagnostic Chile · actualizado <span id="gen"></span></footer>
+  {_footer('actualizado <span id="gen"></span>')}
 </div>
 
 <script>
@@ -1084,6 +1167,7 @@ fillFilters();
 document.getElementById('gen').textContent = RAW.generado;
 refresh();
 </script>
+{_mail_js()}
 </body>
 </html>
 """
@@ -1175,8 +1259,9 @@ def render_reglas(generado: str) -> str:
       <li><strong>Promedio por documento</strong> = monto total filtrado ÷ cantidad de documentos.</li>
     </ul>
   </div>
-  <footer>ADL Diagnostic Chile · página de reglas</footer>
+  {_footer("página de reglas")}
 </div>
+{_mail_js()}
 </body>
 </html>
 """
