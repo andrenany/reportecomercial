@@ -33,6 +33,13 @@ EXCEL_FAC = (
 HOJA_FAC = "KR Resumen Consolidado"
 HOJA_AUX = "Tablas Auxiliares"
 
+# Facturas emitidas en 2026 (incluye provisionados cuya venta fue en 2025)
+EXCEL_FACTURADO_2026 = (
+    r"\\192.168.10.5\adl.ws\Disco I\PM\COM\Carpeta compartida comercial"
+    r"\analsisi fanny\facturado 2026.xlsx"
+)
+HOJA_FACTURADO_2026 = "2026"
+
 DIR_SALIDA = Path(__file__).resolve().parent
 
 # Columnas útiles de OC PENDIENTES (A–T)
@@ -168,6 +175,22 @@ def normalizar_sede(valor) -> str | None:
     return mapa.get(t, t)
 
 
+def sede_desde_cuenta(cuenta) -> str | None:
+    """Infiere sede solo cuando la cuenta contable es claramente geográfica."""
+    cu = normalizar_texto(cuenta) or ""
+    if not cu:
+        return None
+    if "VILLARRICA" in cu:
+        return "VILLARRICA"
+    if "AYSEN" in cu or "AYSEN" in cu.replace("É", "E"):
+        return "AYSEN"
+    if "MONTT" in cu or "PTO MONTT" in cu or "PUERTO MONTT" in cu:
+        return "PUERTO MONTT"
+    # Cuentas de producto/programa (ISAV, PVA, Screening, Asist., Facturas por Emitir, etc.)
+    # no definen sede: debe venir del consolidado Juan.
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Lectura OC Pendientes
 # ---------------------------------------------------------------------------
@@ -222,6 +245,7 @@ def leer_facturacion(path: str = EXCEL_FAC) -> pd.DataFrame:
     rename = {
         "NOMBRE": "Cliente",
         " GLOSA": "Glosa",
+        "GLOSA": "Glosa",
         "NUM. DOC.": "Num_Doc",
         "N° CUENTA": "Num_Cuenta",
         "CUENTA": "Cuenta",
@@ -229,11 +253,21 @@ def leer_facturacion(path: str = EXCEL_FAC) -> pd.DataFrame:
         "Tipo Ingreso": "Tipo_Ingreso",
         "Check Acumulado": "Check_Acumulado",
         "Año": "Anio",
+        "Ano": "Anio",
     }
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
+    # Año puede venir con encoding raro (Año / A�o)
+    if "Anio" not in df.columns:
+        for c in list(df.columns):
+            key = re.sub(r"[^a-z]", "", c.lower().replace("ñ", "n").replace("�", "n"))
+            if key == "ano":
+                df = df.rename(columns={c: "Anio"})
+                break
 
     df["MONTO"] = pd.to_numeric(df["MONTO"], errors="coerce")
     df["Anio"] = pd.to_numeric(df["Anio"], errors="coerce").astype("Int64")
+    if "Num_Doc" in df.columns:
+        df["Num_Doc"] = pd.to_numeric(df["Num_Doc"], errors="coerce")
     df["Cliente_norm"] = df["Cliente"].map(normalizar_texto)
     df["Empresa_norm"] = df["Empresa"].map(normalizar_texto)
     df["Sede_norm"] = df["Sede"].map(normalizar_sede)
@@ -241,6 +275,63 @@ def leer_facturacion(path: str = EXCEL_FAC) -> pd.DataFrame:
     df["Rut_norm"] = df["RUT"].map(normalizar_rut)
     df["PERIODO_norm"] = df["PERIODO"].map(normalizar_texto)
     return df
+
+
+def leer_facturado_2026(path: str = EXCEL_FACTURADO_2026) -> pd.DataFrame:
+    """
+    Listado de líneas facturadas en 2026 (archivo facturado 2026.xlsx).
+    Conserva todas las filas (un doc puede tener varias líneas/cuentas).
+    """
+    df = pd.read_excel(path, sheet_name=HOJA_FACTURADO_2026)
+    df.columns = [str(c).strip() for c in df.columns]
+    rename = {
+        "NOMBRE": "Cliente",
+        "NOMBRE ": "Cliente",
+        "GLOSA": "Glosa",
+        " GLOSA": "Glosa",
+        "NUM. DOC.": "Num_Doc",
+        "NUM. DOC. ": "Num_Doc",
+        "CUENTA": "Cuenta",
+        "CUENTA ": "Cuenta",
+        "N° CUENTA": "Num_Cuenta",
+        "TIPO DOC": "Tipo_Doc",
+    }
+    df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
+    if "Num_Doc" not in df.columns:
+        for c in df.columns:
+            if "DOC" in c.upper() and "TIPO" not in c.upper():
+                df = df.rename(columns={c: "Num_Doc"})
+                break
+    if "Cliente" not in df.columns:
+        for c in df.columns:
+            if c.upper().startswith("NOMBRE"):
+                df = df.rename(columns={c: "Cliente"})
+                break
+    if "Glosa" not in df.columns:
+        for c in df.columns:
+            if "GLOSA" in c.upper():
+                df = df.rename(columns={c: "Glosa"})
+                break
+    if "Cuenta" not in df.columns:
+        for c in df.columns:
+            if c.upper().startswith("CUENTA"):
+                df = df.rename(columns={c: "Cuenta"})
+                break
+
+    df["Num_Doc"] = pd.to_numeric(df["Num_Doc"], errors="coerce")
+    df["MONTO"] = pd.to_numeric(df.get("MONTO"), errors="coerce")
+    df["PERIODO_dt"] = pd.to_datetime(df.get("PERIODO"), errors="coerce")
+    df["anio_factura"] = df["PERIODO_dt"].dt.year.astype("Int64")
+    df["mes_factura"] = df["PERIODO_dt"].dt.month.astype("Int64")
+    df["Cliente_norm"] = df["Cliente"].map(normalizar_texto) if "Cliente" in df.columns else None
+    if "RUT" in df.columns:
+        df["Rut_norm"] = df["RUT"].map(normalizar_rut)
+    else:
+        df["Rut_norm"] = None
+    cuenta = df["Cuenta"] if "Cuenta" in df.columns else pd.Series([None] * len(df))
+    df["Sede_norm"] = cuenta.map(sede_desde_cuenta)
+    df = df.dropna(subset=["Num_Doc"])
+    return df.reset_index(drop=True)
 
 
 def aplicar_alias_empresa(df: pd.DataFrame, mapa: pd.DataFrame, col_cliente: str = "Cliente_norm") -> pd.DataFrame:

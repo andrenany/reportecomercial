@@ -383,19 +383,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <div class="nav-links">
         <a class="" href="dashboard_facturacion.html">Unificado</a>
         <a class="" href="dashboard_facturacion_excel.html">Solo facturación</a>
+        <a class="" href="consulta_facturacion.html">Consulta facturación</a>
         <a class="active" href="reglas.html">Reglas</a>
         <button type="button" class="btn-mail" onclick="solicitarActualizacion(this)">Solicitar actualización</button>
         <button type="button" class="chip" style="border-radius:999px;padding:9px 14px" onclick="adlLogout()">Salir</button>
       </div>
     </div>
     
-  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-08-20 10:31</p>
+  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-08-21 13:52</p>
   <div class="rule-grid">
     <div class="panel">
       <h2>Fuentes (solo lectura)</h2>
       <ul style="color:var(--muted);line-height:1.5">
         <li><strong>Registro comercial (archivo OC)</strong> → hoja de control de ventas/casos</li>
         <li><strong>Facturación consolidada 2026</strong> → KR Resumen Consolidado + Tablas Auxiliares</li>
+        <li><strong>facturado 2026.xlsx</strong> → documentos emitidos en 2026 (año de factura / provisionados)</li>
         <li><strong>PROGRAMAS.xlsx</strong> → clasifica tipo de ingreso (SDG / PVE / SCR / Cap., etc.)</li>
       </ul>
     </div>
@@ -444,10 +446,20 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   </div>
 
   <div class="panel" style="margin-top:12px">
+    <h2>Provisionado (Solo facturación)</h2>
+    <ul style="color:var(--muted);line-height:1.5">
+      <li>En el consolidado de Juan, el <strong>Año</strong> suele ser el de la <em>venta</em> (puede ser 2025).</li>
+      <li>El total de <strong>Facturación 2026</strong> sale de <strong>facturado 2026.xlsx</strong> (todas las líneas del documento), no del Año del consolidado.</li>
+      <li>Si el Año de venta en Juan es anterior al de factura → se marca <strong>provisionado</strong> (color más claro / “(prov.)”), pero el monto sigue dentro de 2026.</li>
+      <li>Ejemplo: venta 2025 facturada en 2026 → entra al total 2026 como provisionado.</li>
+    </ul>
+  </div>
+
+  <div class="panel" style="margin-top:12px">
     <h2>Indicadores</h2>
     <ul style="color:var(--muted);line-height:1.5">
       <li><strong>Unificado</strong>: combina registro comercial + facturación sin OC.</li>
-      <li><strong>Solo facturación</strong>: únicamente el Excel de Facturación consolidada (KR Resumen).</li>
+      <li><strong>Solo facturación</strong>: Excel consolidado + cruce con facturado 2026.xlsx.</li>
       <li>En ambos, cada gráfico tiene botones <em>Gráfico / Tabla / Copiar</em>.</li>
       <li><strong>Promedio por documento</strong> = monto total filtrado ÷ cantidad de documentos.</li>
     </ul>

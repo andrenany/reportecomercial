@@ -1,5 +1,6 @@
 # secretos / local
 sql_config.local.json
+credenciales.env
 .env
 .env.*
 

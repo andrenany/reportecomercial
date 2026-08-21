@@ -1,0 +1,7 @@
+Usuario	Contraseña
+ariofrio
+1234
+gleiva
+4321
+admin
+admin!

@@ -177,6 +177,34 @@ function showToast(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 1600);
 }
+/** Tooltip agrupado: todas las series del punto + periodo en el título. */
+function tipGrupo(periodoFn, { pct=false, conTotal=false, suffix='' } = {}) {
+  return {
+    mode: 'index',
+    intersect: false,
+    callbacks: {
+      title(items) {
+        const label = items[0]?.label ?? '';
+        const periodo = typeof periodoFn === 'function' ? periodoFn() : (periodoFn || '');
+        const base = periodo ? `${label} · ${periodo}` : String(label);
+        return suffix ? `${base} · ${suffix}` : base;
+      },
+      label(c) {
+        const name = c.dataset.label || c.label || 'Monto';
+        if (pct) return `${name}: ${(Number(c.raw)||0).toFixed(1)} %`;
+        if (suffix === 'días' || String(name).toLowerCase().includes('día'))
+          return `${name}: ${(Number(c.raw)||0).toFixed(1)}`;
+        return `${name}: ${typeof fmt === 'function' ? fmt(c.raw) : c.raw}`;
+      },
+      footer(items) {
+        if (!conTotal || !items.length) return '';
+        const tot = items.reduce((a, i) => a + (Number(i.raw) || 0), 0);
+        return 'Total: ' + (typeof fmt === 'function' ? fmt(tot) : tot);
+      }
+    }
+  };
+}
+const interactIndex = { mode: 'index', intersect: false };
 function registerChartTable(id, headers, rows) {
   chartTables[id] = { headers, rows };
   const wrap = document.getElementById('tbl-' + id);

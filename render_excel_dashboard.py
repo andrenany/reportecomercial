@@ -70,14 +70,18 @@ def render_dashboard_excel(payload: dict, css: str, nav_html: str, tipo_color: d
   </section>
 
   <section id="vista-anio" class="section">
-    <p class="cmp-note">Como la hoja <em>Gráficos por Año</em>: evolución SDG / PVE / SCR / Total y desglose por sede.</p>
+    <p class="cmp-note">Como la hoja <em>Gráficos por Año</em>: evolución SDG / PVE / SCR / Total y desglose por sede.
+      Los montos <strong>provisionados</strong> (venta en año anterior, factura en 2026 según <em>facturado 2026.xlsx</em>) se muestran en color más claro con etiqueta “(prov.)”.</p>
     <div class="grid">
       {panel_chart("Ventas por año × tipo", "Serie histórica anual (SDG, PVE, SCR y Total).", "chartAnioTipo")}
       {panel_chart("Por sede × año", "Puerto Montt / Villarrica / Aysén.", "chartAnioSede", "sm")}
     </div>
     <div class="grid" style="margin-top:12px">
       {panel_chart("Meses del año comparar", "Desglose mensual SDG/PVE/SCR del año B (filtro).", "chartAnioMes")}
-      {panel_chart("Variación año B vs A", "Δ % por tipo de ingreso (acumulado).", "chartAnioDelta", "sm")}
+      {panel_chart("Variación año B vs A (tipo)", "Δ % por tipo de ingreso (acumulado).", "chartAnioDelta", "sm")}
+    </div>
+    <div class="grid" style="margin-top:12px">
+      {panel_chart("Variación año B vs A (sede)", "Δ % por sede (acumulado).", "chartAnioDeltaSede", "sm")}
     </div>
   </section>
 
@@ -101,7 +105,7 @@ def render_dashboard_excel(payload: dict, css: str, nav_html: str, tipo_color: d
       <div class="scroll">
         <table>
           <thead><tr>
-            <th>N° Doc</th><th>Periodo</th><th>Cliente</th><th>Tipo</th><th>Sede</th><th>Glosa</th><th class="num">Monto</th>
+            <th>N° Doc</th><th>Periodo</th><th>Cliente</th><th>Tipo</th><th>Sede</th><th>Glosa</th><th>Origen</th><th class="num">Monto</th>
           </tr></thead>
           <tbody id="tbl-det"></tbody>
         </table>
@@ -123,6 +127,8 @@ const ANIOS_EMP = [2024,2025,2026];
 const YEAR_COLORS = {{2024:'#7A92A8', 2025:'#003E6D', 2026:'#F37021'}};
 const SEDE_COLORS = ['#003E6D','#F37021','#0A8F9C','#E8A317','#1F6F8B'];
 const TIPOS = ["SDG","PVE","SCR"];
+const TIPO_COLOR_PROV = {{ SDG:'#7A9BB8', PVE:'#F5B08A', SCR:'#7DBDC4', CAP:'#F0D48A', OTROS:'#B0BEC5' }};
+const isProv = (r) => !!(r.es_provisionado === true || r.es_provisionado === 1 || r.estado_venta === 'provisionado');
 
 const fmt = (n) => new Intl.NumberFormat('es-CL', {{ style:'currency', currency:'CLP', maximumFractionDigits:0 }}).format(n||0);
 const fmtM = (n) => {{
@@ -168,7 +174,7 @@ function fillFilters() {{
   fillMulti('f-mes', meses, [], mesLab);
   fillMulti('f-anio-a', anios, anios.includes(2025) ? [2025] : anios.slice(0,1));
   fillMulti('f-anio-b', anios, anios.includes(2026) ? [2026] : anios.slice(-1));
-  fillMulti('f-sede', uniqueSorted(rows.map(r => r.sede)));
+  fillMulti('f-sede', uniqueSorted(rows.map(r => r.sede).filter(s => s && s !== 'SIN SEDE')));
 }}
 
 function baseFilter(rows) {{
@@ -192,11 +198,15 @@ function renderKpis(rows) {{
   const delta = tb - ta;
   const pct = ta ? (delta/ta*100) : null;
   const mesHint = labelMeses(meses);
+  const prov = rows.filter(isProv);
+  const provB = rb.filter(isProv);
+  const hintB = (mesHint === 'Acumulado' ? 'facturado 2026.xlsx' : mesHint)
+    + (provB.length ? ` · incl. prov. ${{fmtM(sum(provB))}}` : '');
   const items = [
     [`Facturación ${{labelYears(aYears)}}`, fmtM(ta), mesHint, 'navy'],
-    [`Facturación ${{labelYears(bYears)}}`, fmtM(tb), mesHint, 'accent'],
+    [`Facturación ${{labelYears(bYears)}}`, fmtM(tb), hintB, 'accent'],
     ['Variación', fmtM(delta), pct==null?'—':((pct>0?'+':'')+pct.toFixed(1)+'%'), delta>=0?'ok':'danger'],
-    ['Documentos (filtro)', rows.length, uniqueSorted(rows.map(r=>r.cliente_corto)).length + ' empresas', 'info'],
+    ['Provisionados', fmtM(sum(prov)), prov.length + ' lineas (venta != factura)', 'warn'],
   ];
   document.getElementById('kpis').innerHTML = items.map(([l,v,h,cls]) =>
     `<div class="kpi ${{cls}}"><div class="label">${{l}}</div><div class="value">${{v}}</div><div class="hint">${{h}}</div></div>`).join('');
@@ -221,7 +231,14 @@ function renderPorEmpresa(rows) {{
     data: {{ labels, datasets }},
     options: {{
       responsive:true, maintainAspectRatio:false,
-      plugins: {{ legend:{{position:'bottom'}}, tooltip:{{callbacks:{{label:c=>`${{c.dataset.label}}: ${{fmt(c.raw)}}`}}}} }},
+      interaction: interactIndex,
+      plugins: {{
+        legend:{{position:'bottom'}},
+        tooltip: tipGrupo(() => {{
+          const emps = selectedMulti('f-empresa');
+          return (emps.length ? emps.join(', ') : 'Todas las empresas');
+        }}, {{ conTotal: true }})
+      }},
       scales: {{
         x: {{ ticks:{{color:'#627D98'}}, grid:{{display:false}} }},
         y: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }}
@@ -232,10 +249,20 @@ function renderPorEmpresa(rows) {{
   const porAnio = ANIOS_EMP.map(y => sum(data.filter(r => Number(r.anio_venta)===y)));
   charts.empAnio = new Chart(document.getElementById('chartEmpAnio'), {{
     type: 'bar',
-    data: {{ labels: ANIOS_EMP.map(String), datasets:[{{ data: porAnio, backgroundColor: ANIOS_EMP.map(y=>YEAR_COLORS[y]), borderRadius:8, maxBarThickness:48 }}] }},
+    data: {{
+      labels: ANIOS_EMP.map(String),
+      datasets:[{{
+        label: 'Facturación',
+        data: porAnio,
+        backgroundColor: ANIOS_EMP.map(y=>YEAR_COLORS[y]),
+        borderRadius:8,
+        maxBarThickness:48
+      }}]
+    }},
     options: {{
       responsive:true, maintainAspectRatio:false,
-      plugins: {{ legend:{{display:false}}, tooltip:{{callbacks:{{label:c=>fmt(c.raw)}}}} }},
+      interaction: interactIndex,
+      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Por año', {{ conTotal: false }}) }},
       scales: {{
         x: {{ ticks:{{color:'#627D98'}}, grid:{{display:false}} }},
         y: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }}
@@ -247,13 +274,26 @@ function renderPorEmpresa(rows) {{
 function renderPorAnio(rows) {{
   const anios = uniqueSorted(rows.map(r => r.anio_venta)).filter(Boolean);
   const tiposPlot = TIPOS.filter(t => !tiposSel.size || tiposSel.has(t));
-  const datasets = tiposPlot.map(t => ({{
-    label: t,
-    data: anios.map(y => sum(rows.filter(r => Number(r.anio_venta)===y && r.tipo===t))),
-    backgroundColor: TIPO_COLOR[t] || '#829AB1',
-    borderColor: TIPO_COLOR[t] || '#829AB1',
-    borderWidth: 2, tension: .2, fill: false, maxBarThickness: 36, borderRadius: 6
-  }}));
+  const aYears = yearsSelected('f-anio-a', 2025);
+  const bYears = yearsSelected('f-anio-b', 2026);
+  const la = labelYears(aYears), lb = labelYears(bYears);
+  const datasets = [];
+  tiposPlot.forEach(t => {{
+    datasets.push({{
+      label: t,
+      data: anios.map(y => sum(rows.filter(r => Number(r.anio_venta)===y && r.tipo===t && !isProv(r)))),
+      backgroundColor: TIPO_COLOR[t] || '#829AB1',
+      borderColor: TIPO_COLOR[t] || '#829AB1',
+      borderWidth: 2, tension: .2, fill: false, maxBarThickness: 36, borderRadius: 6
+    }});
+    datasets.push({{
+      label: t + ' (prov.)',
+      data: anios.map(y => sum(rows.filter(r => Number(r.anio_venta)===y && r.tipo===t && isProv(r)))),
+      backgroundColor: TIPO_COLOR_PROV[t] || '#B0BEC5',
+      borderColor: TIPO_COLOR_PROV[t] || '#B0BEC5',
+      borderWidth: 1, tension: .2, fill: false, maxBarThickness: 36, borderRadius: 6
+    }});
+  }});
   // Total
   datasets.push({{
     label: 'Total',
@@ -266,7 +306,11 @@ function renderPorAnio(rows) {{
     data: {{ labels: anios.map(String), datasets }},
     options: {{
       responsive:true, maintainAspectRatio:false,
-      plugins: {{ legend:{{position:'bottom', labels:{{boxWidth:12}}}}, tooltip:{{callbacks:{{label:c=>`${{c.dataset.label}}: ${{fmt(c.raw)}}`}}}} }},
+      interaction: interactIndex,
+      plugins: {{
+        legend:{{position:'bottom', labels:{{boxWidth:12}}}},
+        tooltip: tipGrupo(() => 'Por año', {{ conTotal: false }})
+      }},
       scales: {{
         x: {{ ticks:{{color:'#627D98'}}, grid:{{display:false}} }},
         y: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }}
@@ -274,7 +318,7 @@ function renderPorAnio(rows) {{
     }}
   }});
 
-  const sedes = uniqueSorted(rows.map(r => r.sede));
+  const sedes = uniqueSorted(rows.map(r => r.sede).filter(s => s && s !== 'SIN SEDE'));
   charts.anioSede = new Chart(document.getElementById('chartAnioSede'), {{
     type: 'bar',
     data: {{
@@ -283,12 +327,16 @@ function renderPorAnio(rows) {{
         label: s,
         data: anios.map(y => sum(rows.filter(r => Number(r.anio_venta)===y && r.sede===s))),
         backgroundColor: SEDE_COLORS[i%SEDE_COLORS.length],
-        maxBarThickness: 28
+        maxBarThickness: 28, borderRadius: 4
       }}))
     }},
     options: {{
       responsive:true, maintainAspectRatio:false,
-      plugins: {{ legend:{{position:'bottom', labels:{{boxWidth:12}}}}, tooltip:{{callbacks:{{label:c=>`${{c.dataset.label}}: ${{fmt(c.raw)}}`}}}} }},
+      interaction: interactIndex,
+      plugins: {{
+        legend:{{position:'bottom', labels:{{boxWidth:12}}}},
+        tooltip: tipGrupo(() => 'Por sede × año', {{ conTotal: true }})
+      }},
       scales: {{
         x: {{ stacked:false, ticks:{{color:'#627D98'}}, grid:{{display:false}} }},
         y: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }}
@@ -296,22 +344,33 @@ function renderPorAnio(rows) {{
     }}
   }});
 
-  const bYears = yearsSelected('f-anio-b', 2026);
   const rowsB = rows.filter(r => matchAnios(r, bYears));
   charts.anioMes = new Chart(document.getElementById('chartAnioMes'), {{
     type: 'bar',
     data: {{
       labels: MESES.slice(1),
-      datasets: tiposPlot.map(t => ({{
-        label: t,
-        data: Array.from({{length:12}}, (_,i) => sum(rowsB.filter(r => Number(r.mes_venta)===i+1 && r.tipo===t))),
-        backgroundColor: TIPO_COLOR[t]||'#829AB1',
-        stack: 'm', maxBarThickness: 36, borderRadius: 4
-      }}))
+      datasets: tiposPlot.flatMap(t => ([
+        {{
+          label: t,
+          data: Array.from({{length:12}}, (_,i) => sum(rowsB.filter(r => Number(r.mes_venta)===i+1 && r.tipo===t && !isProv(r)))),
+          backgroundColor: TIPO_COLOR[t]||'#829AB1',
+          stack: 'm', maxBarThickness: 36, borderRadius: 4
+        }},
+        {{
+          label: t + ' (prov.)',
+          data: Array.from({{length:12}}, (_,i) => sum(rowsB.filter(r => Number(r.mes_venta)===i+1 && r.tipo===t && isProv(r)))),
+          backgroundColor: TIPO_COLOR_PROV[t]||'#B0BEC5',
+          stack: 'm', maxBarThickness: 36, borderRadius: 4
+        }}
+      ]))
     }},
     options: {{
       responsive:true, maintainAspectRatio:false,
-      plugins: {{ legend:{{position:'bottom'}}, tooltip:{{callbacks:{{label:c=>`${{c.dataset.label}}: ${{fmt(c.raw)}}`}}}} }},
+      interaction: interactIndex,
+      plugins: {{
+        legend:{{position:'bottom'}},
+        tooltip: tipGrupo(() => `Año ${{lb}}`, {{ conTotal: true }})
+      }},
       scales: {{
         x: {{ stacked:true, ticks:{{color:'#627D98', maxRotation:45, font:{{size:10}}}}, grid:{{display:false}} }},
         y: {{ stacked:true, ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }}
@@ -319,7 +378,6 @@ function renderPorAnio(rows) {{
     }}
   }});
 
-  const aYears = yearsSelected('f-anio-a', 2025);
   const deltaLabels = tiposPlot;
   const deltaVals = deltaLabels.map(t => {{
     const va = sum(rows.filter(r => matchAnios(r, aYears) && r.tipo===t));
@@ -330,13 +388,52 @@ function renderPorAnio(rows) {{
     type: 'bar',
     data: {{
       labels: deltaLabels,
-      datasets: [{{ data: deltaVals, backgroundColor: deltaVals.map(v => v>=0 ? '#2F9E71' : '#D64545'), borderRadius:8, maxBarThickness:48 }}]
+      datasets: [{{
+        label: `Δ % ${{lb}} vs ${{la}}`,
+        data: deltaVals,
+        backgroundColor: deltaVals.map(v => v>=0 ? '#2F9E71' : '#D64545'),
+        borderRadius:8, maxBarThickness:48
+      }}]
     }},
     options: {{
       responsive:true, maintainAspectRatio:false,
-      plugins: {{ legend:{{display:false}}, tooltip:{{callbacks:{{label:c=> (c.raw||0).toFixed(1)+' %'}}}} }},
+      interaction: interactIndex,
+      plugins: {{
+        legend:{{display:false}},
+        tooltip: tipGrupo(() => `${{lb}} vs ${{la}}`, {{ pct: true }})
+      }},
       scales: {{
         x: {{ ticks:{{color:'#627D98'}}, grid:{{display:false}} }},
+        y: {{ ticks:{{callback:v=>v+'%', color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }}
+      }}
+    }}
+  }});
+
+  const deltaSedeVals = sedes.map(s => {{
+    const va = sum(rows.filter(r => matchAnios(r, aYears) && r.sede===s));
+    const vb = sum(rows.filter(r => matchAnios(r, bYears) && r.sede===s));
+    return va ? ((vb-va)/va*100) : 0;
+  }});
+  charts.anioDeltaSede = new Chart(document.getElementById('chartAnioDeltaSede'), {{
+    type: 'bar',
+    data: {{
+      labels: sedes,
+      datasets: [{{
+        label: `Δ % ${{lb}} vs ${{la}}`,
+        data: deltaSedeVals,
+        backgroundColor: deltaSedeVals.map(v => v>=0 ? '#2F9E71' : '#D64545'),
+        borderRadius:8, maxBarThickness:48
+      }}]
+    }},
+    options: {{
+      responsive:true, maintainAspectRatio:false,
+      interaction: interactIndex,
+      plugins: {{
+        legend:{{display:false}},
+        tooltip: tipGrupo(() => `${{lb}} vs ${{la}} · sede`, {{ pct: true }})
+      }},
+      scales: {{
+        x: {{ ticks:{{color:'#627D98', maxRotation:25, font:{{size:10}}}}, grid:{{display:false}} }},
         y: {{ ticks:{{callback:v=>v+'%', color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }}
       }}
     }}
@@ -368,7 +465,11 @@ function renderTop(rows) {{
     }},
     options: {{
       indexAxis: 'y', responsive:true, maintainAspectRatio:false,
-      plugins: {{ legend:{{position:'bottom'}}, tooltip:{{callbacks:{{label:c=>`${{c.dataset.label}}: ${{fmt(c.raw)}}`}}}} }},
+      interaction: interactIndex,
+      plugins: {{
+        legend:{{position:'bottom'}},
+        tooltip: tipGrupo(() => `${{la}} vs ${{lb}} · ${{labelMeses(meses)}}`, {{ conTotal: false }})
+      }},
       scales: {{
         x: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }},
         y: {{ ticks:{{color:'#102A43', font:{{size:10}}}}, grid:{{display:false}} }}
@@ -390,7 +491,8 @@ function renderTop(rows) {{
     }},
     options: {{
       indexAxis: 'y', responsive:true, maintainAspectRatio:false,
-      plugins: {{ legend:{{display:false}}, tooltip:{{callbacks:{{label:c=>fmt(c.raw)}}}} }},
+      interaction: interactIndex,
+      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => `Δ ${{lb}}-${{la}}`, {{ conTotal: false }}) }},
       scales: {{
         x: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }},
         y: {{ ticks:{{color:'#102A43', font:{{size:10}}}}, grid:{{display:false}} }}
@@ -406,11 +508,12 @@ function renderDetalle(rows) {{
     <tr>
       <td>${{r.id_caso ?? '—'}}</td><td>${{r.periodo||''}}</td><td>${{r.cliente_corto||''}}</td>
       <td>${{r.tipo||''}}</td><td>${{r.sede||''}}</td><td>${{r.programa||''}}</td>
+      <td>${{isProv(r) ? ('Prov. venta ' + (r.anio_origen ?? '—')) : '—'}}</td>
       <td class="num">${{fmt(r.monto)}}</td>
     </tr>`).join('');
   registerChartTable('detalle',
-    ['N Doc','Periodo','Cliente','Tipo','Sede','Glosa','Monto'],
-    show.map(r => [r.id_caso??'', r.periodo||'', r.cliente_corto||'', r.tipo||'', r.sede||'', r.programa||'', Number(r.monto)||0])
+    ['N Doc','Periodo','Cliente','Tipo','Sede','Glosa','Origen','Monto'],
+    show.map(r => [r.id_caso??'', r.periodo||'', r.cliente_corto||'', r.tipo||'', r.sede||'', r.programa||'', isProv(r)?('Prov. '+ (r.anio_origen??'')):'', Number(r.monto)||0])
   );
 }}
 

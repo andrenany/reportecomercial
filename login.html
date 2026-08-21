@@ -88,8 +88,14 @@
   <script src="auth.js"></script>
   <script>
     if (adlSession()) {
+      const role = adlRole();
       const q = new URLSearchParams(location.search).get("next");
-      location.replace(q || "dashboard_facturacion.html");
+      // PVE no puede ir a otras páginas aunque venga ?next=
+      if (role === "calendario") {
+        location.replace("consulta_facturacion.html");
+      } else {
+        location.replace(q || adlHomeFor(role));
+      }
     }
     document.getElementById("form").addEventListener("submit", async (ev) => {
       ev.preventDefault();
@@ -102,8 +108,13 @@
         return;
       }
       err.classList.remove("show");
+      const role = adlRole();
       const q = new URLSearchParams(location.search).get("next");
-      location.replace(q || "dashboard_facturacion.html");
+      if (role === "calendario") {
+        location.replace("consulta_facturacion.html");
+      } else {
+        location.replace(q || adlHomeFor(role));
+      }
     });
   </script>
 </body>
