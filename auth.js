@@ -95,22 +95,28 @@ function adlLogout() {
   location.href = "login.html";
 }
 
-/** Restringe UI de consulta_facturacion al calendario (rol calendario). */
+/** Restringe UI de consulta_facturacion al calendario + reglas (rol calendario). */
 function adlApplyCalendarioOnly() {
   if (adlRole() !== "calendario") return;
 
+  const allowed = new Set(["calendario", "reglas-cal"]);
   document.querySelectorAll(".tabs button").forEach((b) => {
-    if (b.dataset.tab !== "calendario") b.style.display = "none";
-    else {
-      b.classList.add("active");
+    const t = b.dataset.tab;
+    if (!allowed.has(t)) {
+      b.style.display = "none";
+      b.classList.remove("active");
+    } else {
       b.style.display = "";
     }
+  });
+  // Por defecto abre calendario
+  document.querySelectorAll(".tabs button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.tab === "calendario");
   });
   document.querySelectorAll(".tab-pane").forEach((p) => {
     p.classList.toggle("active", p.id === "tab-calendario");
   });
 
-  // Menú: solo deja esta página y Salir
   document.querySelectorAll(".nav-links a").forEach((a) => {
     const href = (a.getAttribute("href") || "").toLowerCase();
     if (href !== "consulta_facturacion.html") a.style.display = "none";
@@ -120,7 +126,7 @@ function adlApplyCalendarioOnly() {
   const sub = document.querySelector(".subhead h2");
   if (sub) sub.textContent = "Calendario veterinarios";
   const subp = document.querySelector(".subhead p");
-  if (subp) subp.textContent = "Acceso PVE · solo lectura del calendario de muestreo";
+  if (subp) subp.textContent = "Acceso PVE · calendario y reglas (solo lectura)";
 }
 
 adlRequireLogin();

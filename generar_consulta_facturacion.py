@@ -309,6 +309,18 @@ body {{
 .cal-detail th {{ color:var(--muted); font-size:.72rem; text-transform:uppercase; }}
 .cal-detail td.num, .cal-detail th.num {{ text-align:right; font-variant-numeric:tabular-nums; }}
 .cal-detail .scroll {{ max-height:360px; overflow:auto; }}
+.rules-box {{
+  background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px 18px; margin-bottom:12px;
+}}
+.rules-box h3 {{ margin:0 0 8px; color:var(--navy); font-size:1rem; }}
+.rules-box h4 {{ margin:14px 0 6px; color:var(--adl-teal); font-size:.9rem; }}
+.rules-box ul {{ margin:0; padding-left:1.2rem; color:var(--muted); line-height:1.55; }}
+.rules-box li {{ margin:4px 0; }}
+.rules-box strong {{ color:var(--ink); }}
+.rules-box .warn {{
+  margin-top:12px; padding:10px 12px; border-radius:10px;
+  background:#FFF1E6; border-left:4px solid var(--orange); color:#7A3E0B; font-size:.86rem;
+}}
 footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px; }}
 {CSS_CHART_TOOLS}
 </style>
@@ -339,6 +351,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
   <div class="tabs">
     <button type="button" class="active" data-tab="analisis">Análisis</button>
     <button type="button" data-tab="calendario">Calendario veterinarios</button>
+    <button type="button" data-tab="reglas-cal">Reglas calendario</button>
   </div>
 
   <div id="tab-analisis" class="tab-pane active">
@@ -441,6 +454,48 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
             <tfoot id="cal-tfoot"></tfoot>
           </table>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-reglas-cal" class="tab-pane">
+    <div class="rules-box">
+      <h3>Reglas del calendario de veterinarios</h3>
+      <p class="desc" style="margin:0 0 8px;color:var(--muted)">Fuente: vista SQL <strong>dbo.vw_FVivaldiWebSalud</strong> (solo lectura). Montos en pesos = UF × valor UF del día (<code>fac_vtatotal × fac_uf</code>).</p>
+
+      <h4>Qué muestra el calendario</h4>
+      <ul>
+        <li>Se agrupa por <strong>fecha de muestreo</strong> (<code>fecha_muestreo</code>), no por fecha de recepción ni de factura.</li>
+        <li>Por cada día se listan <strong>veterinario</strong>, <strong>sede</strong> (lugar de análisis), <strong>empresa</strong>, <strong>centro</strong> y <strong>programa</strong>.</li>
+        <li><strong>Costo operativo $</strong> = solo filas cuya sección es <strong>“Costo Operativo”</strong>, convertidas a pesos (UF × UF del día).</li>
+        <li><strong>Venta $</strong> = todas las filas del filtro (UF × UF del día), útil como referencia.</li>
+        <li>Datos de calendario cargados desde <strong>2024 en adelante</strong>.</li>
+      </ul>
+
+      <h4>Cómo se hace el match / cruce</h4>
+      <ul>
+        <li><strong>Día</strong> ← <code>fecha_muestreo</code> (formato día/mes/año de la vista).</li>
+        <li><strong>Veterinario</strong> ← <code>nombre_veterinario</code> (se puede ocultar “No aplica” / “Cliente”).</li>
+        <li><strong>Sede</strong> ← <code>nombre_lugaranalisis</code> (Puerto Montt / Aysén / Villarrica).</li>
+        <li><strong>Empresa</strong> ← <code>nombre_empresa</code>.</li>
+        <li><strong>Centro</strong> ← <code>nombre_centro</code>.</li>
+        <li><strong>Programa</strong> ← <code>nombre_programa</code>.</li>
+        <li>Los filtros del calendario (veterinario, sede, programa) son multi-selección: vacío = todos.</li>
+        <li>Al hacer clic en un día se arma el resumen del día sumando N, venta $ y costo operativo $ por veterinario y el detalle por centro.</li>
+        <li>La tabla del mes y el Excel exportan el mismo detalle filtrado (día, vet, sede, empresa, centro, programa, montos).</li>
+      </ul>
+
+      <h4>Qué NO incluye este calendario</h4>
+      <ul>
+        <li>No incluye días de <strong>vuelo</strong>.</li>
+        <li>No incluye <strong>hospedaje</strong>.</li>
+        <li>No incluye <strong>puerto cerrado</strong>.</li>
+        <li>No incluye días de <strong>muestreo de calidad</strong>.</li>
+      </ul>
+      <div class="warn">
+        Este calendario refleja actividad de muestreo operativo registrada en FVivaldi (Web Salud).
+        Los conceptos de vuelo, hospedaje, puerto cerrado y muestreo de calidad quedan fuera del alcance de esta hoja;
+        no deben usarse estos totales para esos ítems.
       </div>
     </div>
   </div>
