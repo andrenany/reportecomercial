@@ -169,6 +169,7 @@ def render_html(payload: dict) -> str:
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="auth.js"></script>
 <style>
 :root {{
@@ -408,6 +409,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
       <div class="filters" id="cal-filters" style="margin:10px 0 12px; box-shadow:none">
         <p class="hint-multi">Puedes marcar varios veterinarios, sedes y programas.</p>
         <label class="f">Veterinario<div class="msel" id="cal-vet" data-empty="Todos"></div></label>
+        <label class="f">Cliente / empresa<div class="msel" id="cal-cliente" data-empty="Todos"></div></label>
         <label class="f">Sede<div class="msel" id="cal-sede" data-empty="Todas"></div></label>
         <label class="f">Programa<div class="msel" id="cal-programa" data-empty="Todos"></div></label>
         <label class="f">Año
@@ -480,7 +482,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li><strong>Empresa</strong> ← <code>nombre_empresa</code>.</li>
         <li><strong>Centro</strong> ← <code>nombre_centro</code>.</li>
         <li><strong>Programa</strong> ← <code>nombre_programa</code>.</li>
-        <li>Los filtros del calendario (veterinario, sede, programa) son multi-selección: vacío = todos.</li>
+        <li>Los filtros del calendario (veterinario, cliente/empresa, sede, programa) son multi-selección: vacío = todos.</li>
         <li>Al hacer clic en un día se arma el resumen del día sumando N, venta $ y costo operativo $ por veterinario y el detalle por centro.</li>
         <li>La tabla del mes y el Excel exportan el mismo detalle filtrado (día, vet, sede, empresa, centro, programa, montos).</li>
       </ul>
@@ -607,7 +609,7 @@ function renderAnalisis() {{
     }},
     options: {{
       responsive:true, maintainAspectRatio:false, interaction: interactIndex,
-      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Por año', {{ conTotal:false }}) }},
+      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Por año', {{ conTotal:false }}), datalabels: dlMoney() }},
       scales: {{
         x: {{ ticks:{{color:'#627D98'}}, grid:{{display:false}} }},
         y: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }}
@@ -624,7 +626,7 @@ function renderAnalisis() {{
     }},
     options: {{
       responsive:true, maintainAspectRatio:false, interaction: interactIndex,
-      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Mensual', {{ conTotal:false }}) }},
+      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Mensual', {{ conTotal:false }}), datalabels: dlMoney({{ minRatio:0.04 }}) }},
       scales: {{
         x: {{ ticks:{{color:'#627D98'}}, grid:{{display:false}} }},
         y: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }}
@@ -641,7 +643,7 @@ function renderAnalisis() {{
     }},
     options: {{
       indexAxis:'y', responsive:true, maintainAspectRatio:false, interaction: interactIndex,
-      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Programa', {{ conTotal:false }}) }},
+      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Programa', {{ conTotal:false }}), datalabels: dlMoney({{ horiz:true }}) }},
       scales: {{
         x: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }},
         y: {{ ticks:{{color:'#102A43', font:{{size:10}}}}, grid:{{display:false}} }}
@@ -660,7 +662,7 @@ function renderAnalisis() {{
     }},
     options: {{
       indexAxis:'y', responsive:true, maintainAspectRatio:false, interaction: interactIndex,
-      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Empresa', {{ conTotal:false }}) }},
+      plugins: {{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Empresa', {{ conTotal:false }}), datalabels: dlMoney({{ horiz:true }}) }},
       scales: {{
         x: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }},
         y: {{ ticks:{{color:'#102A43', font:{{size:10}}}}, grid:{{display:false}} }}
@@ -678,7 +680,8 @@ function renderAnalisis() {{
     options: {{
       responsive:true, maintainAspectRatio:false,
       plugins: {{ legend:{{position:'bottom', labels:{{boxWidth:12, font:{{size:11}}}}}},
-        tooltip: {{ callbacks: {{ label: c => `${{c.label}}: ${{fmtN(c.raw)}} · ${{fmtM(porEst[c.dataIndex]?.venta_clp||0)}}` }} }} }}
+        tooltip: {{ callbacks: {{ label: c => `${{c.label}}: ${{fmtN(c.raw)}} · ${{fmtM(porEst[c.dataIndex]?.venta_clp||0)}}` }} }},
+        datalabels: dlPiePct() }}
     }}
   }});
 
@@ -699,7 +702,8 @@ function renderAnalisis() {{
       responsive:true, maintainAspectRatio:false, interaction: interactIndex,
       plugins: {{
         legend:{{position:'bottom', labels:{{boxWidth:10, font:{{size:10}}}}}},
-        tooltip: tipGrupo(() => 'Año × programa', {{ conTotal:true }})
+        tooltip: tipGrupo(() => 'Año × programa', {{ conTotal:true }}),
+        datalabels: dlMoney({{ stacked:true, minRatio:0.07 }})
       }},
       scales: {{
         x: {{ stacked:true, ticks:{{color:'#627D98'}}, grid:{{display:false}} }},
@@ -725,9 +729,11 @@ function calBaseRows() {{
 function fillCalFilters() {{
   const rows = calBaseRows();
   const prevV = selectedMulti('cal-vet');
+  const prevC = selectedMulti('cal-cliente');
   const prevS = selectedMulti('cal-sede');
   const prevP = selectedMulti('cal-programa');
   fillMulti('cal-vet', uniqueSorted(rows.map(r => r.veterinario)), prevV.filter(v => rows.some(r => r.veterinario===v)));
+  fillMulti('cal-cliente', uniqueSorted(rows.map(r => r.empresa)), prevC.filter(v => rows.some(r => r.empresa===v)));
   fillMulti('cal-sede', uniqueSorted(rows.map(r => r.sede)), prevS.filter(v => rows.some(r => r.sede===v)));
   fillMulti('cal-programa', uniqueSorted(rows.map(r => r.programa)), prevP.filter(v => rows.some(r => r.programa===v)));
 
@@ -747,12 +753,14 @@ function filteredCalRows() {{
   const anio = Number(document.getElementById('cal-anio').value);
   const mes = Number(document.getElementById('cal-mes').value);
   const vets = new Set(selectedMulti('cal-vet'));
+  const clientes = new Set(selectedMulti('cal-cliente'));
   const sedes = new Set(selectedMulti('cal-sede'));
   const progs = new Set(selectedMulti('cal-programa'));
   const prefix = `${{anio}}-${{String(mes).padStart(2,'0')}}`;
   return calBaseRows().filter(r => {{
     if (!String(r.dia||'').startsWith(prefix)) return false;
     if (vets.size && !vets.has(r.veterinario)) return false;
+    if (clientes.size && !clientes.has(r.empresa)) return false;
     if (sedes.size && !sedes.has(r.sede)) return false;
     if (progs.size && !progs.has(r.programa)) return false;
     return true;
@@ -983,7 +991,7 @@ fillFilters();
 }});
 renderAnalisis();
 refreshCal();
-['cal-vet','cal-sede','cal-programa'].forEach(id => {{
+['cal-vet','cal-cliente','cal-sede','cal-programa'].forEach(id => {{
   document.getElementById(id).addEventListener('change', renderCalendario);
 }});
 if (typeof adlApplyCalendarioOnly === 'function') adlApplyCalendarioOnly();

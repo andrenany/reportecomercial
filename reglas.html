@@ -218,6 +218,10 @@ th, td { text-align: left; padding: 9px 7px; border-bottom: 1px solid var(--line
 th { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; position: sticky; top: 0; background: #fff; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .scroll { overflow: auto; max-height: 440px; border-radius: 12px; }
+table.pivot th, table.pivot td { white-space: nowrap; }
+table.pivot th.num, table.pivot td.num { min-width: 92px; }
+table.pivot tfoot td, table.pivot tfoot th { font-weight: 700; background: #F0F6FA; border-top: 2px solid var(--line); }
+table.pivot td.empty { color: #B0BEC5; }
 .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; }
 .b-pend { background: #EAF0F6; color: var(--adl-navy); }
 .b-listo { background: #D9EAF8; color: #1D4E89; }
@@ -390,7 +394,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       </div>
     </div>
     
-  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-08-24 11:23</p>
+  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-08-24 14:21</p>
   <div class="rule-grid">
     <div class="panel">
       <h2>Fuentes (solo lectura)</h2>
@@ -450,8 +454,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     <ul style="color:var(--muted);line-height:1.5">
       <li>En el consolidado de Juan, el <strong>Año</strong> suele ser el de la <em>venta</em> (puede ser 2025).</li>
       <li>El total de <strong>Facturación 2026</strong> sale de <strong>facturado 2026.xlsx</strong> (todas las líneas del documento), no del Año del consolidado.</li>
-      <li>Si el Año de venta en Juan es anterior al de factura → se marca <strong>provisionado</strong> (color más claro / “(prov.)”), pero el monto sigue dentro de 2026.</li>
-      <li>Ejemplo: venta 2025 facturada en 2026 → entra al total 2026 como provisionado.</li>
+      <li>Los montos <strong>provisionados</strong> (venta en año anterior, factura en 2026) <strong>no se incluyen</strong> en KPIs ni gráficos de Solo facturación.</li>
+      <li>Ejemplo: venta 2025 facturada en 2026 → no entra al análisis de Solo facturación.</li>
     </ul>
   </div>
 

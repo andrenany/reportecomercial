@@ -730,6 +730,10 @@ th, td { text-align: left; padding: 9px 7px; border-bottom: 1px solid var(--line
 th { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; position: sticky; top: 0; background: #fff; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .scroll { overflow: auto; max-height: 440px; border-radius: 12px; }
+table.pivot th, table.pivot td { white-space: nowrap; }
+table.pivot th.num, table.pivot td.num { min-width: 92px; }
+table.pivot tfoot td, table.pivot tfoot th { font-weight: 700; background: #F0F6FA; border-top: 2px solid var(--line); }
+table.pivot td.empty { color: #B0BEC5; }
 .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; }
 .b-pend { background: #EAF0F6; color: var(--adl-navy); }
 .b-listo { background: #D9EAF8; color: #1D4E89; }
@@ -831,6 +835,7 @@ def render_dashboard(payload: dict) -> str:
 <title>ADL · Dashboard Facturación</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="auth.js"></script>
 <style>{CSS}</style>
 </head>
@@ -867,6 +872,7 @@ def render_dashboard(payload: dict) -> str:
   <div class="tabs">
     <button class="active" data-tab="vista-ventas">Ventas / Tipo ingreso</button>
     <button data-tab="vista-empresas">Empresas</button>
+    <button data-tab="vista-pendiente">Pendiente facturar</button>
     <button data-tab="vista-ciclo">Ciclo clientes</button>
     <button data-tab="vista-detalle">Detalle</button>
   </div>
@@ -886,6 +892,41 @@ def render_dashboard(payload: dict) -> str:
     <div class="grid">
       {panel_chart("Top 15 empresas", "Nombre corto · monto en filtros activos.", "chartCli", "tall")}
       {panel_chart("Empresa × tipo de ingreso", "Top 10 empresas apiladas por SDG/PVE/SCR…", "chartCliTipo", "tall")}
+    </div>
+  </section>
+
+  <section id="vista-pendiente" class="section">
+    <p class="hint-multi" style="margin:0 0 10px">Solo estado <strong>Falta OC/HES</strong>. Barras apiladas por mes · tabla pivote Cliente × Mes (todas las empresas del filtro).</p>
+    <div class="panel">
+      <div class="panel-head">
+        <div class="titles">
+          <h2>Pendiente de facturar por empresa × mes</h2>
+          <p class="desc">Todas las empresas con pendiente · colores = mes</p>
+        </div>
+        <div class="panel-tools">
+          <button type="button" class="on" data-mode="chart" data-target="chartPendEmp">Gráfico</button>
+          <button type="button" data-mode="table" data-target="chartPendEmp">Tabla</button>
+          <button type="button" data-copy="chartPendEmp">Copiar</button>
+        </div>
+      </div>
+      <div class="chart-box tall" id="box-chartPendEmp" style="height:420px"><canvas id="chartPendEmp"></canvas></div>
+      <div class="chart-table-wrap" id="tbl-chartPendEmp"></div>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <div class="panel-head">
+        <div class="titles">
+          <h2>Tabla pivote · Cliente × Mes</h2>
+          <p class="desc"><span id="pend-count">0</span> empresas · total <span id="pend-total">—</span></p>
+        </div>
+        <div class="panel-tools"><button type="button" data-copy="pendiente">Copiar pivote</button></div>
+      </div>
+      <div class="scroll" style="max-height:520px">
+        <table id="tabla-pendiente" class="pivot">
+          <thead id="pend-thead"></thead>
+          <tbody id="tbl-pendiente"></tbody>
+          <tfoot id="pend-tfoot"></tfoot>
+        </table>
+      </div>
     </div>
   </section>
 
@@ -1083,7 +1124,8 @@ function renderVentas(rows) {{
       interaction: interactIndex,
       plugins: {{
         legend: {{ position: 'bottom', labels: {{ boxWidth: 12 }} }},
-        tooltip: tipGrupo(() => 'Ventas por periodo', {{ conTotal: true }})
+        tooltip: tipGrupo(() => 'Ventas por periodo', {{ conTotal: true }}),
+        datalabels: dlMoney({{ stacked: true, minRatio: 0.05 }})
       }},
       scales: {{
         x: {{ stacked: true, ticks: {{ maxRotation: 45, color:'#627D98', font:{{size:10}} }}, grid: {{ display:false }} }},
@@ -1108,7 +1150,8 @@ function renderVentas(rows) {{
             title: () => 'Mix por tipo',
             label: c => `${{c.label}}: ${{fmt(c.raw)}}`
           }}
-        }}
+        }},
+        datalabels: dlPiePct()
       }}
     }}
   }});
@@ -1123,7 +1166,7 @@ function renderVentas(rows) {{
     options: {{
       responsive:true, maintainAspectRatio:false,
       interaction: interactIndex,
-      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Por estado', {{ conTotal: true }}) }},
+      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Por estado', {{ conTotal: true }}), datalabels: dlMoney() }},
       scales:{{
         x:{{ ticks:{{ color:'#627D98', font:{{size:10}}, maxRotation:25 }}, grid:{{display:false}} }},
         y:{{ ticks:{{ callback:v=>fmtM(v), color:'#627D98' }}, grid:{{ color:'#E4EBF2' }} }}
@@ -1141,7 +1184,7 @@ function renderVentas(rows) {{
     options: {{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
       interaction: interactIndex,
-      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Programa', {{ conTotal: false }}) }},
+      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Programa', {{ conTotal: false }}), datalabels: dlMoney({{ horiz:true }}) }},
       scales:{{
         x:{{ ticks:{{ callback:v=>fmtM(v), color:'#627D98' }}, grid:{{ color:'#E4EBF2' }} }},
         y:{{ ticks:{{ color:'#102A43', font:{{size:10}} }}, grid:{{display:false}} }}
@@ -1163,7 +1206,7 @@ function renderEmpresas(rows) {{
     options: {{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
       interaction: interactIndex,
-      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Top empresas', {{ conTotal: false }}) }},
+      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Top empresas', {{ conTotal: false }}), datalabels: dlMoney({{ horiz:true }}) }},
       scales:{{
         x:{{ ticks:{{ callback:v=>fmtM(v), color:'#627D98' }}, grid:{{ color:'#E4EBF2' }} }},
         y:{{ ticks:{{ color:'#102A43', font:{{size:10}} }}, grid:{{display:false}} }}
@@ -1191,7 +1234,8 @@ function renderEmpresas(rows) {{
       interaction: interactIndex,
       plugins:{{
         legend:{{ position:'bottom', labels:{{ boxWidth:12 }} }},
-        tooltip: tipGrupo(() => 'Empresa × tipo', {{ conTotal: true }})
+        tooltip: tipGrupo(() => 'Empresa × tipo', {{ conTotal: true }}),
+        datalabels: dlMoney({{ horiz:true, stacked:true, minRatio:0.06 }})
       }},
       scales:{{
         x:{{ stacked:true, ticks:{{ callback:v=>fmtM(v), color:'#627D98' }}, grid:{{ color:'#E4EBF2' }} }},
@@ -1199,6 +1243,91 @@ function renderEmpresas(rows) {{
       }}
     }}
   }});
+}}
+
+function renderPendiente(rows) {{
+  const pend = rows.filter(r => r.estado_venta === 'pendiente_facturar');
+  const MES_COLORS = ['#003E6D','#F37021','#0A8F9C','#E9B949','#2F9E71','#7B68A6','#D64545','#829AB1','#1A5F8A','#FF8A3D','#5E8C61','#C45C26'];
+  const mesSet = new Set();
+  const byEmp = new Map();
+  pend.forEach(r => {{
+    const emp = r.cliente_corto || '(sin empresa)';
+    const m = Number(r.mes_venta)||0;
+    if (m < 1 || m > 12) return;
+    mesSet.add(m);
+    if (!byEmp.has(emp)) byEmp.set(emp, {{ byMes: {{}}, total: 0 }});
+    const o = byEmp.get(emp);
+    o.byMes[m] = (o.byMes[m]||0) + (Number(r.monto)||0);
+    o.total += Number(r.monto)||0;
+  }});
+  const meses = [...mesSet].sort((a,b)=>a-b);
+  const empresas = [...byEmp.entries()].sort((a,b)=>b[1].total-a[1].total).map(([e]) => e);
+
+  const box = document.getElementById('box-chartPendEmp');
+  if (box) box.style.height = Math.max(320, Math.min(980, 26 * Math.max(empresas.length,1) + 80)) + 'px';
+
+  charts.pendEmp = new Chart(document.getElementById('chartPendEmp'), {{
+    type: 'bar',
+    data: {{
+      labels: empresas,
+      datasets: meses.map((m,i) => ({{
+        label: MESES[m],
+        data: empresas.map(e => byEmp.get(e).byMes[m] || 0),
+        backgroundColor: MES_COLORS[(m-1) % MES_COLORS.length],
+        stack: 'pend',
+        maxBarThickness: 22,
+        borderWidth: 0
+      }}))
+    }},
+    options: {{
+      indexAxis: 'y', responsive:true, maintainAspectRatio:false,
+      interaction: interactIndex,
+      plugins: {{
+        legend: {{ position:'bottom', labels:{{ boxWidth:12, font:{{size:10}} }} }},
+        tooltip: tipGrupo(() => 'Pendiente · empresa × mes', {{ conTotal: true }}),
+        datalabels: dlMoney({{ horiz:true, stacked:true, minRatio:0.06 }})
+      }},
+      scales: {{
+        x: {{ stacked:true, ticks:{{ callback:v=>fmtM(v), color:'#627D98' }}, grid:{{ color:'#E4EBF2' }} }},
+        y: {{ stacked:true, ticks:{{ color:'#102A43', font:{{size:10}} }}, grid:{{display:false}} }}
+      }}
+    }}
+  }});
+
+  const colTot = meses.map(m => empresas.reduce((a,e)=>a+(byEmp.get(e).byMes[m]||0),0));
+  const granTot = colTot.reduce((a,b)=>a+b,0);
+  document.getElementById('pend-count').textContent = empresas.length;
+  document.getElementById('pend-total').textContent = fmtM(granTot);
+  document.getElementById('pend-thead').innerHTML = `<tr>
+    <th>Cliente</th>${{meses.map(m=>`<th class="num">${{MESES[m]}}</th>`).join('')}}<th class="num">Total general</th>
+  </tr>`;
+  document.getElementById('tbl-pendiente').innerHTML = empresas.map(e => {{
+    const o = byEmp.get(e);
+    return `<tr>
+      <td>${{e}}</td>
+      ${{meses.map(m => {{
+        const v = o.byMes[m]||0;
+        return v ? `<td class="num">${{fmt(v)}}</td>` : `<td class="num empty"></td>`;
+      }}).join('')}}
+      <td class="num"><strong>${{fmt(o.total)}}</strong></td>
+    </tr>`;
+  }}).join('') || `<tr><td colspan="${{meses.length+2}}" style="color:var(--muted)">Sin pendiente con el filtro actual</td></tr>`;
+  document.getElementById('pend-tfoot').innerHTML = empresas.length ? `<tr>
+    <th>Total general</th>
+    ${{colTot.map(v => `<th class="num">${{fmt(v)}}</th>`).join('')}}
+    <th class="num">${{fmt(granTot)}}</th>
+  </tr>` : '';
+
+  registerChartTable('pendiente',
+    ['Cliente', ...meses.map(m => MESES[m]), 'Total general'],
+    [
+      ...empresas.map(e => {{
+        const o = byEmp.get(e);
+        return [e, ...meses.map(m => o.byMes[m]||0), o.total];
+      }}),
+      ['Total general', ...colTot, granTot]
+    ]
+  );
 }}
 
 function renderCiclo(rows) {{
@@ -1219,7 +1348,7 @@ function renderCiclo(rows) {{
     options: {{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
       interaction: interactIndex,
-      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Ciclo (días)', {{ conTotal: false }}) }},
+      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Ciclo (días)', {{ conTotal: false }}), datalabels: dlDays() }},
       scales:{{
         x:{{ title:{{display:true,text:'Días'}}, grid:{{color:'#E4EBF2'}}, ticks:{{color:'#627D98'}} }},
         y:{{ ticks:{{color:'#102A43', font:{{size:10}}}}, grid:{{display:false}} }}
@@ -1232,7 +1361,7 @@ function renderCiclo(rows) {{
   charts.cat = new Chart(document.getElementById('chartCat'), {{
     type:'doughnut',
     data: {{ labels: cats, datasets:[{{ data: catCount, backgroundColor:['#2F9E71','#3E7CB1','#E9B949','#D64545'], borderWidth:0 }}] }},
-    options: {{ responsive:true, maintainAspectRatio:false, plugins:{{ legend:{{position:'bottom'}}, tooltip:{{callbacks:{{label:c=>`${{c.label}}: ${{c.raw}} clientes`}}}} }} }}
+    options: {{ responsive:true, maintainAspectRatio:false, plugins:{{ legend:{{position:'bottom'}}, tooltip:{{callbacks:{{label:c=>`${{c.label}}: ${{c.raw}} clientes`}}}}, datalabels: dlPiePct() }} }}
   }});
   document.getElementById('cat-resumen').innerHTML = cats.map((c,i) =>
     `<span class="badge ${{ {{Rapido:'b-rapido',Normal:'b-normal',Lento:'b-lento',Critico:'b-critico'}}[c] }}">${{c}}: ${{catCount[i]}}</span>`
@@ -1271,6 +1400,7 @@ function refresh() {{
   renderKpis(rows);
   renderVentas(rows);
   renderEmpresas(rows);
+  renderPendiente(rows);
   renderCiclo(rows);
   renderDetalle(rows);
   syncAllChartTables();
@@ -1398,8 +1528,8 @@ def render_reglas(generado: str) -> str:
     <ul style="color:var(--muted);line-height:1.5">
       <li>En el consolidado de Juan, el <strong>Año</strong> suele ser el de la <em>venta</em> (puede ser 2025).</li>
       <li>El total de <strong>Facturación 2026</strong> sale de <strong>facturado 2026.xlsx</strong> (todas las líneas del documento), no del Año del consolidado.</li>
-      <li>Si el Año de venta en Juan es anterior al de factura → se marca <strong>provisionado</strong> (color más claro / “(prov.)”), pero el monto sigue dentro de 2026.</li>
-      <li>Ejemplo: venta 2025 facturada en 2026 → entra al total 2026 como provisionado.</li>
+      <li>Los montos <strong>provisionados</strong> (venta en año anterior, factura en 2026) <strong>no se incluyen</strong> en KPIs ni gráficos de Solo facturación.</li>
+      <li>Ejemplo: venta 2025 facturada en 2026 → no entra al análisis de Solo facturación.</li>
     </ul>
   </div>
 

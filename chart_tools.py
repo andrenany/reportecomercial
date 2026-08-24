@@ -164,6 +164,89 @@ const chartDepthPlugin = {
 if (typeof Chart !== 'undefined' && !Chart.registry.plugins.get('adlDepth')) {
   Chart.register(chartDepthPlugin);
 }
+if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined' && !Chart.registry.plugins.get('datalabels')) {
+  Chart.register(ChartDataLabels);
+  Chart.defaults.plugins.datalabels = Object.assign({}, Chart.defaults.plugins.datalabels || {}, { display: false });
+}
+
+/** Etiqueta compacta tipo $91 mil M / $12.3 M / $1.2 mil */
+function fmtLabel(v, { pct=false, days=false } = {}) {
+  if (pct) return (Number(v)||0).toFixed(0) + '%';
+  if (days) return (Number(v)||0).toFixed(0) + ' d';
+  if (typeof fmtM === 'function') return fmtM(v);
+  const n = Number(v)||0;
+  if (Math.abs(n) >= 1e9) return '$' + (n/1e9).toFixed(2) + ' mil M';
+  if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + ' M';
+  if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + ' mil';
+  return String(Math.round(n));
+}
+function _dlHideTiny(ctx, minRatio=0.035) {
+  const v = Math.abs(Number(ctx.dataset.data[ctx.dataIndex])||0);
+  if (!v) return false;
+  const all = (ctx.chart.data.datasets || []).flatMap(d => (d.data||[]).map(x => Math.abs(Number(x)||0)));
+  const max = Math.max(0, ...all);
+  return max ? v >= max * minRatio : true;
+}
+/** Datalabels dinero en barras/líneas */
+function dlMoney(opts = {}) {
+  const horiz = !!opts.horiz;
+  const stacked = !!opts.stacked;
+  return {
+    display: (ctx) => _dlHideTiny(ctx, opts.minRatio ?? 0.035),
+    formatter: (v) => fmtLabel(v),
+    color: opts.color || '#102A43',
+    font: { size: opts.size || 9, weight: '700', family: 'IBM Plex Sans, sans-serif' },
+    anchor: opts.anchor || (horiz ? 'end' : (stacked ? 'center' : 'end')),
+    align: opts.align || (horiz ? 'right' : (stacked ? 'center' : 'top')),
+    offset: opts.offset ?? (horiz ? 2 : 2),
+    clamp: true,
+    clip: false,
+  };
+}
+/** Datalabels porcentaje (variación / mix) */
+function dlPct(opts = {}) {
+  return {
+    display: (ctx) => {
+      const v = Number(ctx.dataset.data[ctx.dataIndex]);
+      return v != null && !Number.isNaN(v);
+    },
+    formatter: (v) => fmtLabel(v, { pct: true }),
+    color: opts.color || '#102A43',
+    font: { size: opts.size || 10, weight: '700' },
+    anchor: opts.anchor || 'end',
+    align: opts.align || 'top',
+    clamp: true,
+  };
+}
+/** Datalabels % en doughnut/pie */
+function dlPiePct(opts = {}) {
+  return {
+    display: (ctx) => {
+      const data = ctx.chart.data.datasets[0]?.data || [];
+      const tot = data.reduce((a,b)=>a+(Number(b)||0),0);
+      const v = Number(ctx.dataset.data[ctx.dataIndex])||0;
+      return tot && v/tot >= (opts.minPct ?? 0.04);
+    },
+    formatter: (v, ctx) => {
+      const data = ctx.chart.data.datasets[0]?.data || [];
+      const tot = data.reduce((a,b)=>a+(Number(b)||0),0);
+      return tot ? Math.round(v/tot*100) + '%' : '';
+    },
+    color: opts.color || '#fff',
+    font: { size: opts.size || 11, weight: '700' },
+  };
+}
+function dlDays(opts = {}) {
+  return {
+    display: (ctx) => _dlHideTiny(ctx, 0.02),
+    formatter: (v) => fmtLabel(v, { days: true }),
+    color: opts.color || '#102A43',
+    font: { size: 9, weight: '700' },
+    anchor: 'end',
+    align: 'right',
+    clamp: true,
+  };
+}
 
 function showToast(msg) {
   let t = document.getElementById('toast');
