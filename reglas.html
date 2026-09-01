@@ -394,14 +394,13 @@ table.pivot td.empty { color: #B0BEC5; }
       </div>
     </div>
     
-  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-08-28 10:58</p>
+  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-09-01 11:29</p>
   <div class="rule-grid">
     <div class="panel">
       <h2>Fuentes (solo lectura)</h2>
       <ul style="color:var(--muted);line-height:1.5">
         <li><strong>Registro comercial (archivo OC)</strong> → hoja de control de ventas/casos</li>
-        <li><strong>Facturación consolidada 2026</strong> → KR Resumen Consolidado + Tablas Auxiliares</li>
-        <li><strong>facturado 2026.xlsx</strong> → documentos emitidos en 2026 (año de factura / provisionados)</li>
+        <li><strong>Juan consolidado</strong> → <em>Gráficos Facturación … Juan original.xlsx</em> (KR Resumen Consolidado + Tablas Auxiliares). Fuente de Solo facturación (todos los años, incluido 2026).</li>
         <li><strong>PROGRAMAS.xlsx</strong> → clasifica tipo de ingreso (SDG / PVE / SCR / Cap., etc.)</li>
       </ul>
     </div>
@@ -450,12 +449,12 @@ table.pivot td.empty { color: #B0BEC5; }
   </div>
 
   <div class="panel" style="margin-top:12px">
-    <h2>Provisionado (Solo facturación)</h2>
+    <h2>Solo facturación (fuente Juan)</h2>
     <ul style="color:var(--muted);line-height:1.5">
-      <li>En el consolidado de Juan, el <strong>Año</strong> suele ser el de la <em>venta</em> (puede ser 2025).</li>
-      <li>El total de <strong>Facturación 2026</strong> sale de <strong>facturado 2026.xlsx</strong> (todas las líneas del documento), no del Año del consolidado.</li>
-      <li>Los montos <strong>provisionados</strong> (venta en año anterior, factura en 2026) <strong>no se incluyen</strong> en KPIs ni gráficos de Solo facturación.</li>
-      <li>Ejemplo: venta 2025 facturada en 2026 → no entra al análisis de Solo facturación.</li>
+      <li>La fuente única es el Excel de <strong>Juan</strong> (KR Resumen Consolidado). Año y mes salen de las columnas Año / PERIODO (o Month).</li>
+      <li><strong>No se usa</strong> <em>facturado 2026.xlsx</em>.</li>
+      <li><strong>No se consideran provisionados</strong>: el análisis toma el Año del consolidado tal cual, sin marcar ni separar venta≠factura.</li>
+      <li>Para actualizar 2026 (p. ej. julio en adelante), basta con actualizar el archivo de Juan y regenerar el dashboard.</li>
     </ul>
   </div>
 
@@ -463,7 +462,7 @@ table.pivot td.empty { color: #B0BEC5; }
     <h2>Indicadores</h2>
     <ul style="color:var(--muted);line-height:1.5">
       <li><strong>Unificado</strong>: combina registro comercial + facturación sin OC.</li>
-      <li><strong>Solo facturación</strong>: Excel consolidado + cruce con facturado 2026.xlsx.</li>
+      <li><strong>Solo facturación</strong>: solo el consolidado Juan (sin facturado 2026.xlsx ni provisionados).</li>
       <li>En ambos, cada gráfico tiene botones <em>Gráfico / Tabla / Copiar</em>.</li>
       <li><strong>Promedio por documento</strong> = monto total filtrado ÷ cantidad de documentos.</li>
     </ul>

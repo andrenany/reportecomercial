@@ -22,7 +22,6 @@ from leer_oc_pendientes import (
     DIR_SALIDA,
     limpiar_fecha,
     leer_facturacion,
-    leer_facturado_2026,
     leer_mapa_empresas,
     leer_oc_pendientes,
     normalizar_texto,
@@ -339,14 +338,13 @@ def _aplicar_exclusiones(ventas: pd.DataFrame) -> pd.DataFrame:
 def construir_ventas_facturacion_excel(
     fac: pd.DataFrame,
     mapa_prog: pd.DataFrame,
-    facturado_2026: pd.DataFrame | None = None,
+    facturado_2026: pd.DataFrame | None = None,  # ignorado: la fuente es Juan
 ) -> pd.DataFrame:
     """
-    Solo facturación:
-    - Años históricos: KR Resumen Consolidado (Juan).
-    - Año 2026: fuente de verdad = facturado 2026.xlsx (todas las líneas).
-      Si el Año de venta en Juan es anterior → provisionado (color / etiqueta).
+    Solo facturación: toda la serie sale del consolidado Juan
+    (KR Resumen Consolidado). No se usa facturado 2026.xlsx ni provisionados.
     """
+    del facturado_2026  # compat firma; ya no se usa
     fac2 = fac.reset_index(drop=True).copy()
 
     def mes_desde_fila(row) -> float:
@@ -359,6 +357,12 @@ def construir_ventas_facturacion_excel(
         return float("nan")
 
     glosa = fac2["Glosa"] if "Glosa" in fac2.columns else pd.Series([None] * len(fac2))
+    sede = fac2["Sede_norm"] if "Sede_norm" in fac2.columns else pd.Series([None] * len(fac2))
+    # Fallback sede desde cuenta si falta
+    if "Cuenta" in fac2.columns:
+        sede = sede.where(sede.notna() & (sede != "") & (sede != "SIN SEDE"), fac2["Cuenta"].map(sede_desde_cuenta))
+    sede = sede.fillna("PUERTO MONTT")
+
     out = pd.DataFrame({
         "anio_origen": fac2["Anio"],
         "anio_venta": fac2["Anio"],
@@ -367,130 +371,18 @@ def construir_ventas_facturacion_excel(
         "cliente_corto": fac2["Cliente_key"].fillna(fac2["Empresa_norm"]).fillna(fac2["Cliente_norm"]),
         "tipo": fac2["Tipo_Ingreso"].map(_norm_sigla),
         "programa": glosa.map(normalizar_texto).fillna(fac2["Tipo_Ingreso"].map(normalizar_texto)),
-        "sede": fac2["Sede_norm"] if "Sede_norm" in fac2.columns else None,
+        "sede": sede,
         "cuenta": fac2["Cuenta"] if "Cuenta" in fac2.columns else None,
         "id_caso": fac2["Num_Doc"] if "Num_Doc" in fac2.columns else fac2.index.astype(str),
         "num_doc": pd.to_numeric(fac2["Num_Doc"], errors="coerce") if "Num_Doc" in fac2.columns else pd.NA,
         "es_provisionado": False,
-        "fuente": "Facturación consolidada",
-        "_from_fac26": False,
+        "fuente": "Juan consolidado",
     })
-
-    if facturado_2026 is not None and len(facturado_2026):
-        f26 = facturado_2026.reset_index(drop=True).copy()
-        docs26 = set(pd.to_numeric(f26["Num_Doc"], errors="coerce").dropna().astype(int))
-
-        # Evitar doble conteo: sacar del consolidado los docs ya cubiertos por facturado 2026
-        # y cualquier fila Juan ya marcada como 2026 (la verdad de 2026 es facturado 2026.xlsx)
-        out = out[~out["num_doc"].isin(docs26)].copy()
-        out = out[pd.to_numeric(out["anio_venta"], errors="coerce") != 2026].copy()
-
-        # Lookup Año/tipo/sede/cliente desde Juan (por documento)
-        meta = fac2.copy()
-        meta["num_doc"] = pd.to_numeric(meta["Num_Doc"], errors="coerce") if "Num_Doc" in meta.columns else pd.NA
-        meta = meta.dropna(subset=["num_doc"])
-        meta["num_doc"] = meta["num_doc"].astype(int)
-        # Si un doc tiene varias filas Juan, toma la sede del mayor |monto|
-        meta["_abs"] = pd.to_numeric(meta["MONTO"], errors="coerce").abs().fillna(0)
-        meta = meta.sort_values("_abs", ascending=False)
-        agg_kw: dict = {
-            "anio_origen": ("Anio", "first"),
-            "tipo_juan": ("Tipo_Ingreso", "first"),
-        }
-        if "Sede_norm" in meta.columns:
-            agg_kw["sede_juan"] = ("Sede_norm", "first")
-        if "Cliente_key" in meta.columns:
-            agg_kw["cliente_juan"] = ("Cliente_key", "first")
-        elif "Cliente_norm" in meta.columns:
-            agg_kw["cliente_juan"] = ("Cliente_norm", "first")
-        if "Rut_norm" in meta.columns:
-            agg_kw["rut_juan"] = ("Rut_norm", "first")
-        meta_doc = meta.groupby("num_doc", as_index=True).agg(**agg_kw)
-
-        # Sede modal por RUT / cliente (fallback cuando el doc no está en Juan)
-        sede_por_rut = {}
-        sede_por_cli = {}
-        if "Sede_norm" in meta.columns:
-            tmp = meta[meta["Sede_norm"].notna() & ~meta["Sede_norm"].isin(["NO CORRESPONDE", "SIN SEDE"])]
-            if "Rut_norm" in tmp.columns:
-                sede_por_rut = (
-                    tmp.groupby("Rut_norm")["Sede_norm"]
-                    .agg(lambda s: s.value_counts().index[0])
-                    .to_dict()
-                )
-            for col in ("Cliente_key", "Cliente_norm"):
-                if col in tmp.columns:
-                    sede_por_cli.update(
-                        tmp.groupby(col)["Sede_norm"]
-                        .agg(lambda s: s.value_counts().index[0])
-                        .to_dict()
-                    )
-
-        rows26 = []
-        for i, r in f26.iterrows():
-            nd = int(r["Num_Doc"]) if pd.notna(r["Num_Doc"]) else None
-            if nd is None:
-                continue
-            anio_fac = int(r["anio_factura"]) if pd.notna(r.get("anio_factura")) else 2026
-            mes_fac = int(r["mes_factura"]) if pd.notna(r.get("mes_factura")) else 1
-            anio_orig = None
-            tipo = None
-            sede = None
-            cliente = normalizar_texto(r.get("Cliente")) if pd.notna(r.get("Cliente")) else None
-            rut = r.get("Rut_norm")
-            if nd in meta_doc.index:
-                m = meta_doc.loc[nd]
-                anio_orig = m["anio_origen"] if pd.notna(m["anio_origen"]) else None
-                tipo = _norm_sigla(m["tipo_juan"]) if "tipo_juan" in m.index else None
-                if "sede_juan" in m.index and pd.notna(m["sede_juan"]) and str(m["sede_juan"]) not in ("SIN SEDE", ""):
-                    sede = m["sede_juan"]
-                if "cliente_juan" in m.index and pd.notna(m["cliente_juan"]):
-                    cliente = m["cliente_juan"]
-                if (rut is None or (isinstance(rut, float) and pd.isna(rut))) and "rut_juan" in m.index:
-                    rut = m["rut_juan"]
-            # Fallbacks: nunca dejar SIN SEDE si Juan tiene sede para el RUT/cliente
-            if not sede and rut in sede_por_rut:
-                sede = sede_por_rut[rut]
-            if not sede and cliente in sede_por_cli:
-                sede = sede_por_cli[cliente]
-            if not sede:
-                sede = sede_desde_cuenta(r.get("Cuenta"))
-            if not sede or sede == "SIN SEDE":
-                # Último recurso comercial (en Juan no existe "sin sede")
-                sede = "PUERTO MONTT"
-            gl = r.get("Glosa")
-            if not tipo or tipo == "OTROS":
-                t2, _, _ = clasificar_tipo(gl, mapa_prog)
-                tipo = t2
-            es_prov = bool(anio_orig is not None and int(anio_orig) != anio_fac)
-            rows26.append({
-                "anio_origen": anio_orig if anio_orig is not None else anio_fac,
-                "anio_venta": anio_fac,
-                "mes_venta": mes_fac,
-                "monto": pd.to_numeric(r.get("MONTO"), errors="coerce"),
-                "cliente_corto": cliente or "Sin cliente",
-                "tipo": tipo or "OTROS",
-                "programa": normalizar_texto(gl) or (tipo or "Sin programa"),
-                "sede": sede,
-                "cuenta": r.get("Cuenta"),
-                "id_caso": nd,
-                "num_doc": nd,
-                "es_provisionado": es_prov,
-                "fuente": "facturado 2026",
-                "_from_fac26": True,
-            })
-        if rows26:
-            out = pd.concat([out, pd.DataFrame(rows26)], ignore_index=True)
 
     out["periodo"] = [_periodo_label(a, m) for a, m in zip(out["anio_venta"], out["mes_venta"])]
     out["tipo_nombre"] = out["tipo"].map(lambda t: TIPO_LABEL.get(t, t))
-    out["id_origen"] = out.apply(
-        lambda r: ("F26-" if r.get("_from_fac26") else "FAC-") + str(r.get("num_doc") or r.name),
-        axis=1,
-    )
-    out["estado_venta"] = out["es_provisionado"].map(
-        lambda p: "provisionado" if p else "facturada"
-    )
+    out["id_origen"] = "FAC-" + out["num_doc"].fillna(out.index.to_series()).astype(str)
+    out["estado_venta"] = "facturada"
     out["fecha_venta"] = pd.to_datetime(
         dict(
             year=pd.to_numeric(out["anio_venta"], errors="coerce"),
@@ -513,7 +405,6 @@ def construir_ventas_facturacion_excel(
     out["tipo"] = out["tipo"].fillna("OTROS")
     out["programa"] = out["programa"].fillna("Sin programa")
     out["cliente_corto"] = out["cliente_corto"].fillna("Sin cliente")
-    out = out.drop(columns=["_from_fac26"], errors="ignore")
     out = _aplicar_exclusiones(out)
     return out.reset_index(drop=True)
 
@@ -1474,8 +1365,7 @@ def render_reglas(generado: str) -> str:
       <h2>Fuentes (solo lectura)</h2>
       <ul style="color:var(--muted);line-height:1.5">
         <li><strong>Registro comercial (archivo OC)</strong> → hoja de control de ventas/casos</li>
-        <li><strong>Facturación consolidada 2026</strong> → KR Resumen Consolidado + Tablas Auxiliares</li>
-        <li><strong>facturado 2026.xlsx</strong> → documentos emitidos en 2026 (año de factura / provisionados)</li>
+        <li><strong>Juan consolidado</strong> → <em>Gráficos Facturación … Juan original.xlsx</em> (KR Resumen Consolidado + Tablas Auxiliares). Fuente de Solo facturación (todos los años, incluido 2026).</li>
         <li><strong>PROGRAMAS.xlsx</strong> → clasifica tipo de ingreso (SDG / PVE / SCR / Cap., etc.)</li>
       </ul>
     </div>
@@ -1524,12 +1414,12 @@ def render_reglas(generado: str) -> str:
   </div>
 
   <div class="panel" style="margin-top:12px">
-    <h2>Provisionado (Solo facturación)</h2>
+    <h2>Solo facturación (fuente Juan)</h2>
     <ul style="color:var(--muted);line-height:1.5">
-      <li>En el consolidado de Juan, el <strong>Año</strong> suele ser el de la <em>venta</em> (puede ser 2025).</li>
-      <li>El total de <strong>Facturación 2026</strong> sale de <strong>facturado 2026.xlsx</strong> (todas las líneas del documento), no del Año del consolidado.</li>
-      <li>Los montos <strong>provisionados</strong> (venta en año anterior, factura en 2026) <strong>no se incluyen</strong> en KPIs ni gráficos de Solo facturación.</li>
-      <li>Ejemplo: venta 2025 facturada en 2026 → no entra al análisis de Solo facturación.</li>
+      <li>La fuente única es el Excel de <strong>Juan</strong> (KR Resumen Consolidado). Año y mes salen de las columnas Año / PERIODO (o Month).</li>
+      <li><strong>No se usa</strong> <em>facturado 2026.xlsx</em>.</li>
+      <li><strong>No se consideran provisionados</strong>: el análisis toma el Año del consolidado tal cual, sin marcar ni separar venta≠factura.</li>
+      <li>Para actualizar 2026 (p. ej. julio en adelante), basta con actualizar el archivo de Juan y regenerar el dashboard.</li>
     </ul>
   </div>
 
@@ -1537,7 +1427,7 @@ def render_reglas(generado: str) -> str:
     <h2>Indicadores</h2>
     <ul style="color:var(--muted);line-height:1.5">
       <li><strong>Unificado</strong>: combina registro comercial + facturación sin OC.</li>
-      <li><strong>Solo facturación</strong>: Excel consolidado + cruce con facturado 2026.xlsx.</li>
+      <li><strong>Solo facturación</strong>: solo el consolidado Juan (sin facturado 2026.xlsx ni provisionados).</li>
       <li>En ambos, cada gráfico tiene botones <em>Gráfico / Tabla / Copiar</em>.</li>
       <li><strong>Promedio por documento</strong> = monto total filtrado ÷ cantidad de documentos.</li>
     </ul>
@@ -1577,18 +1467,13 @@ def main() -> None:
     print("Unificando ventas + tipos de ingreso...")
     ventas = construir_ventas_unificadas(oc, fac, mapa_prog)
 
-    print("Armando dashboard Solo facturación (gráficos Excel)...")
-    try:
-        fac26 = leer_facturado_2026()
-        print(f"  facturado 2026.xlsx: {len(fac26):,} lineas · {fac26['Num_Doc'].nunique():,} docs · ${fac26['MONTO'].sum():,.0f}")
-    except Exception as e:
-        print(f"  AVISO: no se pudo leer facturado 2026.xlsx ({e})")
-        fac26 = None
-    ventas_fac = construir_ventas_facturacion_excel(fac, mapa_prog, fac26)
-    if fac26 is not None and "es_provisionado" in ventas_fac.columns:
-        n_prov = int(ventas_fac["es_provisionado"].sum())
-        m_prov = float(ventas_fac.loc[ventas_fac["es_provisionado"], "monto"].sum())
-        print(f"  Provisionados (venta != factura): {n_prov:,} docs · ${m_prov:,.0f}")
+    print("Armando dashboard Solo facturación (fuente: Juan consolidado)...")
+    ventas_fac = construir_ventas_facturacion_excel(fac, mapa_prog)
+    v26 = ventas_fac[pd.to_numeric(ventas_fac["anio_venta"], errors="coerce") == 2026]
+    print(
+        f"  Juan 2026: {len(v26):,} lineas · {v26['id_caso'].nunique():,} docs · "
+        f"${v26['monto'].sum():,.0f} · meses {sorted(pd.to_numeric(v26['mes_venta'], errors='coerce').dropna().astype(int).unique().tolist())}"
+    )
 
     cols_u = [
         "fuente", "id_origen", "id_caso", "cliente_corto", "programa", "tipo", "tipo_nombre",

@@ -33,7 +33,8 @@ EXCEL_FAC = (
 HOJA_FAC = "KR Resumen Consolidado"
 HOJA_AUX = "Tablas Auxiliares"
 
-# Facturas emitidas en 2026 (incluye provisionados cuya venta fue en 2025)
+# Facturado 2026.xlsx: ya no se usa en Solo facturación (fuente = Juan).
+# Se deja el path por si hace falta un cruce puntual a futuro.
 EXCEL_FACTURADO_2026 = (
     r"\\192.168.10.5\adl.ws\Disco I\PM\COM\Carpeta compartida comercial"
     r"\analsisi fanny\facturado 2026.xlsx"
