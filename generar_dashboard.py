@@ -445,7 +445,7 @@ body {
     linear-gradient(180deg, #F7FAFC 0%, var(--bg) 40%, #E8EEF4 100%);
   min-height: 100vh;
 }
-.wrap { max-width: 1420px; margin: 0 auto; padding: 18px 18px 56px; }
+.wrap { max-width: none; width: 100%; margin: 0 auto; padding: 18px 28px 56px; box-sizing: border-box; }
 .topnav {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 12px 16px; margin-bottom: 14px;

@@ -121,6 +121,8 @@ def analizar(cur, vista: str) -> dict:
             COUNT(*) AS n,
             SUM({EXPR_CLP}) AS venta_clp,
             SUM(CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(nombre_seccion,'')))) = 'COSTO OPERATIVO'
+                     THEN CAST(fac_vtatotal AS FLOAT) ELSE 0 END) AS costo_operativo_uf,
+            SUM(CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(nombre_seccion,'')))) = 'COSTO OPERATIVO'
                      THEN {EXPR_CLP} ELSE 0 END) AS costo_operativo_clp
         FROM {vista}
         WHERE TRY_CONVERT(date, fecha_muestreo, 103) IS NOT NULL
@@ -167,78 +169,97 @@ def render_html(payload: dict) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ADL · Consulta facturación</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="auth.js"></script>
 <style>
 :root {{
   --adl-navy:#003E6D; --adl-orange:#F37021; --adl-teal:#0A8F9C;
+  --adl-navy-soft:#1A5F8A; --adl-sky:#E8F1F7;
   --navy:#003E6D; --orange:#F37021; --teal:#0A8F9C;
   --ink:#0F2A40; --muted:#5B738B; --line:#D7E3EE; --bg:#EEF3F8; --panel:#fff;
   --ok:#2F9E71; --danger:#D64545;
+  --shadow:0 12px 36px rgba(0,42,74,.08);
 }}
 * {{ box-sizing:border-box; }}
 body {{
   margin:0; font-family:"IBM Plex Sans",system-ui,sans-serif; color:var(--ink);
-  background: linear-gradient(180deg,#F7FAFC 0%, var(--bg) 40%, #E8EEF4 100%);
+  min-height:100vh;
+  background:
+    radial-gradient(900px 420px at -5% -10%, rgba(243,112,33,.16), transparent 55%),
+    radial-gradient(800px 380px at 105% 0%, rgba(10,143,156,.14), transparent 50%),
+    linear-gradient(180deg,#F7FAFC 0%, var(--bg) 40%, #E8EEF4 100%);
 }}
 .topnav {{
-  display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;
-  padding:12px 18px; background:rgba(255,255,255,.92); border-bottom:1px solid var(--line);
-  position:sticky; top:0; z-index:40; backdrop-filter:blur(8px);
+  display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:12px 16px; margin-bottom:14px;
+  background:linear-gradient(135deg,#fff 0%, var(--adl-sky) 100%);
+  border:1px solid rgba(215,227,238,.9); border-radius:20px;
+  box-shadow:var(--shadow);
+  backdrop-filter:blur(8px);
 }}
 .brand-row {{ display:flex; align-items:center; gap:12px; }}
-.brand-row img {{ height:44px; background:#fff; border-radius:8px; padding:2px; }}
-.brand-text {{ font-weight:700; color:var(--navy); font-size:1.05rem; }}
+.brand-row img {{ height:54px; width:auto; display:block; }}
+.brand-text {{ font-family:Manrope,sans-serif; font-weight:800; font-size:1.08rem; color:var(--navy); line-height:1.15; }}
 .brand-text span {{ color:var(--orange); }}
 .nav-links {{ display:flex; gap:8px; flex-wrap:wrap; }}
 .nav-links a, .nav-links button {{
-  text-decoration:none; color:var(--navy); border:1px solid var(--line); background:#fff;
-  padding:9px 14px; border-radius:999px; font:inherit; font-size:.88rem; cursor:pointer;
+  text-decoration:none; color:var(--navy); border:1px solid var(--line); background:rgba(255,255,255,.75);
+  padding:9px 14px; border-radius:999px; font:inherit; font-size:.85rem; font-weight:700; cursor:pointer;
 }}
 .nav-links a:hover {{ border-color:var(--orange); color:var(--orange); }}
-.nav-links a.active {{ background:var(--navy); color:#fff; border-color:var(--navy); }}
+.nav-links a.active {{
+  background:linear-gradient(135deg, var(--navy), var(--adl-navy-soft));
+  color:#fff; border-color:transparent;
+}}
 .chip {{ background:#fff; border:1px solid var(--line); }}
-.wrap {{ max-width:1240px; margin:0 auto; padding:14px 18px 28px; }}
+.wrap {{ max-width:none; width:100%; margin:0 auto; padding:18px 28px 56px; box-sizing:border-box; }}
 .subhead {{ display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:baseline; margin-bottom:12px; }}
 .subhead h2 {{ margin:0; font-size:1.1rem; color:var(--navy); }}
 .subhead p {{ margin:0; color:var(--teal); font-size:.85rem; font-weight:600; }}
 .meta {{ color:var(--muted); font-size:.78rem; text-align:right; line-height:1.45; }}
-.tabs {{ display:flex; gap:8px; margin-bottom:12px; }}
+.tabs {{ display:flex; gap:8px; margin:16px 0 12px; flex-wrap:wrap; }}
 .tabs button {{
-  border:1px solid var(--line); background:#fff; color:var(--navy); border-radius:999px;
-  padding:8px 16px; font:inherit; cursor:pointer;
+  border:1px solid var(--line); background:rgba(255,255,255,.85); color:var(--navy); border-radius:999px;
+  padding:9px 16px; font:inherit; font-weight:700; cursor:pointer;
 }}
-.tabs button.active {{ background:var(--navy); color:#fff; border-color:var(--navy); }}
+.tabs button.active {{
+  background:linear-gradient(135deg, var(--navy), var(--teal));
+  color:#fff; border-color:transparent;
+}}
 .tab-pane {{ display:none; }}
 .tab-pane.active {{ display:block; }}
 .filters {{
   display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;
-  background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:12px 14px;
+  background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:16px;
   margin-bottom:14px; position:relative; z-index:30;
+  box-shadow:0 4px 16px rgba(0,62,109,.05);
 }}
-.filters label.f {{ display:flex; flex-direction:column; gap:4px; font-size:.75rem; color:var(--muted); min-width:150px; }}
-.filters .hint-multi {{ width:100%; font-size:.72rem; color:var(--muted); margin:0; }}
-.kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }}
+.filters label.f {{ display:flex; flex-direction:column; gap:5px; font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); min-width:160px; flex:1; }}
+.filters .hint-multi {{ width:100%; font-size:.72rem; color:var(--muted); margin:0; text-transform:none; letter-spacing:0; font-weight:400; }}
+.kpis {{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; margin-bottom:14px; }}
+@media (max-width:1100px) {{ .kpis {{ grid-template-columns:repeat(2, minmax(0, 1fr)); }} }}
 .kpi {{
-  background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px;
+  background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:16px 16px 14px;
   border-left:4px solid var(--navy);
+  box-shadow:0 4px 16px rgba(0,62,109,.05);
 }}
 .kpi.accent {{ border-left-color:var(--orange); }}
 .kpi.ok {{ border-left-color:var(--ok); }}
-.kpi .l {{ font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }}
-.kpi .v {{ font-size:1.2rem; font-weight:700; color:var(--navy); margin-top:3px; }}
-.kpi .h {{ font-size:.75rem; color:var(--muted); margin-top:2px; }}
-.grid {{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }}
-@media (max-width:900px) {{ .grid {{ grid-template-columns:1fr; }} }}
+.kpi .l {{ font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }}
+.kpi .v {{ font-family:Manrope,sans-serif; font-size:1.38rem; font-weight:800; color:var(--navy); margin-top:6px; letter-spacing:-.02em; }}
+.kpi .h {{ font-size:.76rem; color:var(--muted); margin-top:4px; }}
+.grid {{ display:grid; grid-template-columns:1.35fr 1fr; gap:14px; }}
+@media (max-width:980px) {{ .grid {{ grid-template-columns:1fr; }} }}
 .panel {{
-  background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:12px 14px;
+  background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:16px;
+  box-shadow:0 4px 16px rgba(0,62,109,.05);
 }}
-.panel h3 {{ margin:0 0 4px; font-size:.95rem; color:var(--navy); }}
-.panel .desc {{ margin:0 0 8px; color:var(--muted); font-size:.8rem; }}
-.chart-wrap {{ position:relative; height:280px; }}
-.chart-wrap.tall {{ height:340px; }}
+.panel h3 {{ margin:0 0 4px; font-family:Manrope,sans-serif; font-size:1.02rem; color:var(--navy); }}
+.panel .desc {{ margin:0 0 10px; color:var(--muted); font-size:.82rem; }}
+.chart-wrap {{ position:relative; height:340px; }}
+.chart-wrap.tall {{ height:400px; }}
 .cal-controls {{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:12px; }}
 .cal-controls label {{ display:flex; flex-direction:column; gap:4px; font-size:.75rem; color:var(--muted); }}
 .cal-controls select, .cal-controls input {{
@@ -327,6 +348,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
 </style>
 </head>
 <body>
+<div class="wrap">
 <div class="topnav">
   <div class="brand-row">
     <img src="logo_adl.png" alt="ADL" onerror="this.style.display='none'" />
@@ -340,7 +362,6 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
     <button type="button" class="chip" style="border-radius:999px;padding:9px 14px" onclick="adlLogout()">Salir</button>
   </div>
 </div>
-<div class="wrap">
   <div class="subhead">
     <div>
       <h2>Consulta facturación</h2>
@@ -457,6 +478,36 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
           </table>
         </div>
       </div>
+      <div class="cal-detail" id="cal-resumen-box" style="margin-top:14px">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+          <div>
+            <h3 style="margin:0">Resumen por empresa y sede</h3>
+            <p class="desc" id="cal-resumen-desc" style="margin:4px 0 0">Elige año, mes y programa. Días = fechas de muestreo distintas. Costo operativo en UF (sección Costo Operativo).</p>
+          </div>
+          <button type="button" class="chip" id="btn-excel-cal-resumen" style="border-radius:999px;padding:9px 14px;background:var(--ok);color:#fff;border-color:var(--ok)">Descargar Excel</button>
+        </div>
+        <div class="filters" style="margin:12px 0 0; box-shadow:none; padding:10px 12px">
+          <p class="hint-multi">Puedes marcar varios años, meses y programas. Vacío = todos. También respeta veterinario, cliente y sede de arriba.</p>
+          <label class="f" style="min-width:140px">Año<div class="msel" id="cal-resumen-anio" data-empty="Todos los años"></div></label>
+          <label class="f" style="min-width:160px">Mes<div class="msel" id="cal-resumen-mes" data-empty="Todos los meses"></div></label>
+          <label class="f" style="min-width:220px;flex:1.4">Programa<div class="msel" id="cal-resumen-programa" data-empty="Todos los programas"></div></label>
+        </div>
+        <div id="cal-resumen-kpis" class="kpis" style="margin-top:12px"></div>
+        <div class="scroll" style="max-height:420px;overflow:auto;margin-top:10px">
+          <table id="cal-resumen-table">
+            <thead>
+              <tr>
+                <th>Empresa</th>
+                <th>Sede</th>
+                <th class="num">Días</th>
+                <th class="num">Costo operativo UF</th>
+              </tr>
+            </thead>
+            <tbody id="cal-resumen-tbody"></tbody>
+            <tfoot id="cal-resumen-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -470,6 +521,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li>Se agrupa por <strong>fecha de muestreo</strong> (<code>fecha_muestreo</code>), no por fecha de recepción ni de factura.</li>
         <li>Por cada día se listan <strong>veterinario</strong>, <strong>sede</strong> (lugar de análisis), <strong>empresa</strong>, <strong>centro</strong> y <strong>programa</strong>.</li>
         <li><strong>Costo operativo $</strong> = solo filas cuya sección es <strong>“Costo Operativo”</strong>, convertidas a pesos (UF × UF del día).</li>
+        <li><strong>Costo operativo UF</strong> = las mismas filas de “Costo Operativo”, en UF (<code>fac_vtatotal</code>, sin multiplicar por el valor UF del día).</li>
         <li><strong>Venta $</strong> = todas las filas del filtro (UF × UF del día), útil como referencia.</li>
         <li>Datos de calendario cargados desde <strong>2024 en adelante</strong>.</li>
       </ul>
@@ -485,6 +537,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li>Los filtros del calendario (veterinario, cliente/empresa, sede, programa) son multi-selección: vacío = todos.</li>
         <li>Al hacer clic en un día se arma el resumen del día sumando N, venta $ y costo operativo $ por veterinario y el detalle por centro.</li>
         <li>La tabla del mes y el Excel exportan el mismo detalle filtrado (día, vet, sede, empresa, centro, programa, montos).</li>
+        <li>La tabla <strong>Resumen por empresa y sede</strong> se filtra por año(s), mes(es) y programa(s) a elección: empresa, sede, días distintos de muestreo y costo operativo en UF.</li>
       </ul>
 
       <h4>Qué NO incluye este calendario</h4>
@@ -519,6 +572,7 @@ const fmtM = n => {{
 }};
 const fmtN = n => new Intl.NumberFormat('es-CL').format(Number(n)||0);
 const fmtUf = n => new Intl.NumberFormat('es-CL', {{ maximumFractionDigits: 1 }}).format(Number(n)||0);
+const fmtUf2 = n => new Intl.NumberFormat('es-CL', {{ minimumFractionDigits: 2, maximumFractionDigits: 2 }}).format(Number(n)||0);
 const uniqueSorted = arr => [...new Set(arr.filter(x => x !== null && x !== undefined && x !== ''))]
   .sort((a,b) => String(a).localeCompare(String(b), 'es', {{ numeric:true }}));
 const sum = (rows, key='venta_clp') => rows.reduce((a,r) => a + (Number(r[key])||0), 0);
@@ -747,6 +801,7 @@ function fillCalFilters() {{
   else if (anios.length) selA.value = anios[anios.length-1];
   if (prevM) selM.value = prevM;
   else selM.value = String(new Date().getMonth()+1);
+  fillCalResumenPeriodo();
 }}
 
 function filteredCalRows() {{
@@ -843,6 +898,7 @@ function renderCalendario() {{
   }});
 
   renderCalTable();
+  renderCalResumen();
   if (selectedDia && selectedDia.startsWith(`${{anio}}-${{String(mes).padStart(2,'0')}}`))
     showDiaDetalle(selectedDia, false);
 }}
@@ -872,6 +928,134 @@ function renderCalTable() {{
       <td class="num">${{fmt(sum(rows))}}</td>
       <td class="num">${{fmt(sum(rows, 'costo_operativo_clp'))}}</td>
     </tr>` : '';
+}}
+
+function fillCalResumenPeriodo() {{
+  const rows = calBaseRows();
+  const anios = uniqueSorted(rows.map(r => String(r.dia||'').slice(0,4)).filter(a => /^\\d{{4}}$/.test(a)));
+  const mesesVals = ['1','2','3','4','5','6','7','8','9','10','11','12'];
+  const mesLabels = Object.fromEntries(mesesVals.map(m => [m, MESES_L[Number(m)]]));
+  const prevA = selectedMulti('cal-resumen-anio').filter(v => anios.includes(v));
+  const prevM = selectedMulti('cal-resumen-mes').filter(v => mesesVals.includes(v));
+  const programas = uniqueSorted(rows.map(r => r.programa));
+  const prevP = selectedMulti('cal-resumen-programa').filter(v => programas.includes(v));
+  let preA = prevA, preM = prevM, preP = prevP;
+  if (!preA.length && !preM.length && !preP.length) {{
+    const anio = document.getElementById('cal-anio').value;
+    const mes = String(Number(document.getElementById('cal-mes').value)||0);
+    if (anios.includes(anio)) preA = [anio];
+    else if (anios.length) preA = [anios[anios.length-1]];
+    if (mesesVals.includes(mes)) preM = [mes];
+    preP = selectedMulti('cal-programa').filter(v => programas.includes(v));
+  }}
+  fillMulti('cal-resumen-anio', anios, preA);
+  fillMulti('cal-resumen-mes', mesesVals, preM, mesLabels);
+  fillMulti('cal-resumen-programa', programas, preP);
+}}
+
+function filteredCalResumenRows() {{
+  const anios = new Set(selectedMulti('cal-resumen-anio').map(Number));
+  const meses = new Set(selectedMulti('cal-resumen-mes').map(Number));
+  const vets = new Set(selectedMulti('cal-vet'));
+  const clientes = new Set(selectedMulti('cal-cliente'));
+  const sedes = new Set(selectedMulti('cal-sede'));
+  const progs = new Set(selectedMulti('cal-resumen-programa'));
+  return calBaseRows().filter(r => {{
+    const d = String(r.dia||'');
+    const y = Number(d.slice(0,4));
+    const m = Number(d.slice(5,7));
+    if (anios.size && !anios.has(y)) return false;
+    if (meses.size && !meses.has(m)) return false;
+    if (vets.size && !vets.has(r.veterinario)) return false;
+    if (clientes.size && !clientes.has(r.empresa)) return false;
+    if (sedes.size && !sedes.has(r.sede)) return false;
+    if (progs.size && !progs.has(r.programa)) return false;
+    return true;
+  }});
+}}
+
+function calResumenAgg() {{
+  const map = new Map();
+  filteredCalResumenRows().forEach(r => {{
+    const emp = r.empresa || '(sin empresa)';
+    const sede = r.sede || '(sin sede)';
+    const k = emp + '\\t' + sede;
+    const cur = map.get(k) || {{ empresa: emp, sede: sede, dias: new Set(), uf: 0 }};
+    if (r.dia) cur.dias.add(r.dia);
+    cur.uf += Number(r.costo_operativo_uf)||0;
+    map.set(k, cur);
+  }});
+  return [...map.values()]
+    .map(x => ({{ empresa: x.empresa, sede: x.sede, dias: x.dias.size, uf: x.uf }}))
+    .sort((a,b) => String(a.empresa).localeCompare(String(b.empresa), 'es')
+      || String(a.sede).localeCompare(String(b.sede), 'es'));
+}}
+
+function labelMesesResumen() {{
+  const anios = selectedMulti('cal-resumen-anio');
+  const meses = selectedMulti('cal-resumen-mes');
+  const progs = selectedMulti('cal-resumen-programa');
+  const aTxt = !anios.length ? 'todos los años'
+    : anios.length <= 3 ? anios.join(', ')
+    : anios.length + ' años';
+  const mTxt = !meses.length ? 'todos los meses'
+    : meses.length <= 4 ? meses.map(m => MESES_L[Number(m)] || m).join(', ')
+    : meses.length + ' meses';
+  const pTxt = !progs.length ? 'todos los programas'
+    : progs.length === 1 ? progs[0]
+    : progs.length + ' programas';
+  return aTxt + ' · ' + mTxt + ' · ' + pTxt;
+}}
+
+function renderCalResumen() {{
+  const items = calResumenAgg();
+  const totDias = items.reduce((a,x) => a + x.dias, 0);
+  const totUf = items.reduce((a,x) => a + x.uf, 0);
+  const mesesTxt = labelMesesResumen();
+  document.getElementById('cal-resumen-desc').textContent =
+    `${{items.length}} combinaciones empresa × sede · ${{mesesTxt}} · respeta filtros de veterinario, cliente y sede`;
+  document.getElementById('cal-resumen-kpis').innerHTML = [
+    ['Empresas × sede', fmtN(items.length), mesesTxt, ''],
+    ['Días (suma)', fmtN(totDias), 'días de muestreo distintos por fila', ''],
+    ['Costo operativo UF', fmtUf2(totUf), 'sección Costo Operativo', 'ok'],
+  ].map(([l,v,h,cls]) => `<div class="kpi ${{cls}}"><div class="l">${{l}}</div><div class="v">${{v}}</div><div class="h">${{h}}</div></div>`).join('');
+  document.getElementById('cal-resumen-tbody').innerHTML = items.map(x => `
+    <tr>
+      <td>${{x.empresa}}</td>
+      <td>${{x.sede}}</td>
+      <td class="num">${{fmtN(x.dias)}}</td>
+      <td class="num">${{fmtUf2(x.uf)}}</td>
+    </tr>`).join('') || `<tr><td colspan="4" style="color:var(--muted)">Sin datos para los meses y filtros elegidos</td></tr>`;
+  document.getElementById('cal-resumen-tfoot').innerHTML = items.length ? `
+    <tr style="font-weight:700;background:#F7FAFC">
+      <td colspan="2">TOTAL</td>
+      <td class="num">${{fmtN(totDias)}}</td>
+      <td class="num">${{fmtUf2(totUf)}}</td>
+    </tr>` : '';
+}}
+
+function csvCell(v) {{
+  const s = String(v ?? '');
+  return /[;"\\n]/.test(s) ? `"${{s.replace(/"/g,'""')}}"` : s;
+}}
+
+function downloadCalResumenExcel() {{
+  const items = calResumenAgg();
+  if (!items.length) {{ alert('No hay filas para exportar con los meses y filtros actuales.'); return; }}
+  const lines = [['Empresa','Sede','Dias','Costo_Operativo_UF'].join(';')];
+  items.forEach(x => {{
+    lines.push([csvCell(x.empresa), csvCell(x.sede), x.dias, (Number(x.uf)||0).toFixed(2).replace('.', ',')].join(';'));
+  }});
+  const totDias = items.reduce((a,x) => a + x.dias, 0);
+  const totUf = items.reduce((a,x) => a + x.uf, 0);
+  lines.push(['TOTAL','', totDias, totUf.toFixed(2).replace('.', ',')].join(';'));
+  const bom = '\\uFEFF';
+  const blob = new Blob([bom + lines.join('\\r\\n')], {{ type: 'text/csv;charset=utf-8;' }});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'calendario_resumen_empresa_sede.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
 }}
 
 function showDiaDetalle(dia, doScroll=true) {{
@@ -978,6 +1162,10 @@ function refreshCal() {{
 }}
 
 document.getElementById('btn-excel-cal').addEventListener('click', downloadCalExcel);
+document.getElementById('btn-excel-cal-resumen').addEventListener('click', downloadCalResumenExcel);
+['cal-resumen-anio','cal-resumen-mes','cal-resumen-programa'].forEach(id => {{
+  document.getElementById(id).addEventListener('change', renderCalResumen);
+}});
 ['cal-anio','cal-mes','cal-ocultar-na'].forEach(id => {{
   document.getElementById(id).addEventListener('change', () => {{
     if (id === 'cal-ocultar-na') fillCalFilters();
