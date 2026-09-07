@@ -90,7 +90,7 @@ def analizar(cur, vista: str) -> dict:
             YEAR(TRY_CONVERT(date, fecha_recepcion, 103)) AS anio,
             MONTH(TRY_CONVERT(date, fecha_recepcion, 103)) AS mes,
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_programa)), ''), '(sin programa)') AS programa,
-            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresa)), ''), '(sin empresa)') AS empresa,
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresaservicios)), ''), '(sin empresa)') AS empresa,
             ISNULL(NULLIF(LTRIM(RTRIM(estado)), ''), '(sin estado)') AS estado,
             COUNT(*) AS n,
             SUM(CAST(fac_vtatotal AS FLOAT)) AS venta_uf,
@@ -102,7 +102,7 @@ def analizar(cur, vista: str) -> dict:
             YEAR(TRY_CONVERT(date, fecha_recepcion, 103)),
             MONTH(TRY_CONVERT(date, fecha_recepcion, 103)),
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_programa)), ''), '(sin programa)'),
-            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresa)), ''), '(sin empresa)'),
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresaservicios)), ''), '(sin empresa)'),
             ISNULL(NULLIF(LTRIM(RTRIM(estado)), ''), '(sin estado)')
         """,
     )
@@ -115,7 +115,7 @@ def analizar(cur, vista: str) -> dict:
             CONVERT(char(10), TRY_CONVERT(date, fecha_muestreo, 103), 23) AS dia,
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_veterinario)), ''), '(sin veterinario)') AS veterinario,
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_lugaranalisis)), ''), '(sin sede)') AS sede,
-            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresa)), ''), '(sin empresa)') AS empresa,
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresaservicios)), ''), '(sin empresa)') AS empresa,
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_programa)), ''), '(sin programa)') AS programa,
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_centro)), ''), '(sin centro)') AS centro,
             COUNT(*) AS n,
@@ -131,7 +131,7 @@ def analizar(cur, vista: str) -> dict:
             CONVERT(char(10), TRY_CONVERT(date, fecha_muestreo, 103), 23),
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_veterinario)), ''), '(sin veterinario)'),
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_lugaranalisis)), ''), '(sin sede)'),
-            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresa)), ''), '(sin empresa)'),
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresaservicios)), ''), '(sin empresa)'),
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_programa)), ''), '(sin programa)'),
             ISNULL(NULLIF(LTRIM(RTRIM(nombre_centro)), ''), '(sin centro)')
         """,
@@ -531,7 +531,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li><strong>Día</strong> ← <code>fecha_muestreo</code> (formato día/mes/año de la vista).</li>
         <li><strong>Veterinario</strong> ← <code>nombre_veterinario</code> (se puede ocultar “No aplica” / “Cliente”).</li>
         <li><strong>Sede</strong> ← <code>nombre_lugaranalisis</code> (Puerto Montt / Aysén / Villarrica).</li>
-        <li><strong>Empresa</strong> ← <code>nombre_empresa</code>.</li>
+        <li><strong>Empresa</strong> ← <code>nombre_empresaservicios</code> (no <code>nombre_empresa</code>).</li>
         <li><strong>Centro</strong> ← <code>nombre_centro</code>.</li>
         <li><strong>Programa</strong> ← <code>nombre_programa</code>.</li>
         <li>Los filtros del calendario (veterinario, cliente/empresa, sede, programa) son multi-selección: vacío = todos.</li>

@@ -809,7 +809,10 @@ def render_dashboard(payload: dict) -> str:
           <h2>Tabla pivote · Cliente × Mes</h2>
           <p class="desc"><span id="pend-count">0</span> empresas · total <span id="pend-total">—</span></p>
         </div>
-        <div class="panel-tools"><button type="button" data-copy="pendiente">Copiar pivote</button></div>
+        <div class="panel-tools">
+          <button type="button" data-copy="pendiente">Copiar pivote</button>
+          <button type="button" data-copy-image="tabla-pendiente">Copiar imagen</button>
+        </div>
       </div>
       <div class="scroll" style="max-height:520px">
         <table id="tabla-pendiente" class="pivot">

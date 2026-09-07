@@ -335,6 +335,59 @@ function copyTable(id) {
     showToast('Datos copiados');
   });
 }
+function loadHtml2Canvas() {
+  if (window.html2canvas) return Promise.resolve(window.html2canvas);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+    s.onload = () => resolve(window.html2canvas);
+    s.onerror = () => reject(new Error('html2canvas'));
+    document.head.appendChild(s);
+  });
+}
+async function copyElementAsImage(id) {
+  const src = document.getElementById(id);
+  if (!src) { showToast('No hay tabla para copiar'); return; }
+  showToast('Generando imagen…');
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;left:-12000px;top:0;background:#fff;padding:18px 20px;font-family:"IBM Plex Sans",system-ui,sans-serif;color:#0F2A40;';
+  const panel = src.closest('.panel');
+  const h2 = panel && panel.querySelector('h2');
+  const desc = panel && panel.querySelector('.desc');
+  const title = document.createElement('div');
+  title.style.cssText = 'font-family:Manrope,sans-serif;font-weight:800;font-size:16px;color:#003E6D;margin-bottom:4px;';
+  title.textContent = (h2 && h2.textContent.trim()) || 'Tabla';
+  holder.appendChild(title);
+  if (desc) {
+    const d = document.createElement('div');
+    d.style.cssText = 'font-size:12px;color:#5B738B;margin-bottom:10px;';
+    d.textContent = desc.innerText.trim();
+    holder.appendChild(d);
+  }
+  holder.appendChild(src.cloneNode(true));
+  document.body.appendChild(holder);
+  try {
+    const h2c = await loadHtml2Canvas();
+    const canvas = await h2c(holder, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    if (!blob) throw new Error('blob');
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      showToast('Imagen copiada');
+    } catch (err) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (id || 'tabla') + '.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast('Imagen descargada');
+    }
+  } catch (e) {
+    showToast('No se pudo copiar la imagen');
+  } finally {
+    holder.remove();
+  }
+}
 function setPanelMode(id, mode) {
   const canvasBox = document.getElementById(id)?.closest('.chart-box');
   const wrap = document.getElementById('tbl-' + id);
@@ -354,8 +407,9 @@ function setPanelMode(id, mode) {
   }
 }
 document.addEventListener('click', (ev) => {
-  const btn = ev.target.closest('[data-mode],[data-copy]');
+  const btn = ev.target.closest('[data-mode],[data-copy],[data-copy-image]');
   if (!btn) return;
+  if (btn.dataset.copyImage) { copyElementAsImage(btn.dataset.copyImage); return; }
   if (btn.dataset.copy) { copyTable(btn.dataset.copy); return; }
   if (btn.dataset.mode) setPanelMode(btn.dataset.target, btn.dataset.mode);
 });
