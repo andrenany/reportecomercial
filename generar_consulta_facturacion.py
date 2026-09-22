@@ -358,6 +358,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
     <a href="dashboard_facturacion.html">Unificado</a>
     <a href="dashboard_facturacion_excel.html">Solo facturación</a>
     <a class="active" href="consulta_facturacion.html">Consulta facturación</a>
+    <a href="resumen_cantidad.html">Resumen cantidad</a>
     <a href="reglas.html">Reglas</a>
     <button type="button" class="chip" style="border-radius:999px;padding:9px 14px" onclick="adlLogout()">Salir</button>
   </div>

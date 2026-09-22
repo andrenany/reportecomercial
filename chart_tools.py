@@ -406,9 +406,75 @@ function setPanelMode(id, mode) {
     btnG && btnG.classList.add('on');
   }
 }
+function loadXlsxLib() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = () => reject(new Error('xlsx'));
+    document.head.appendChild(s);
+  });
+}
+function safeSheetName(name) {
+  const raw = String(name || 'Datos').replace(/[:\\\\/?*\\[\\]]/g, ' ').trim() || 'Datos';
+  return raw.slice(0, 31);
+}
+function downloadRowsCsv(headers, rows, filename) {
+  const lines = [headers].concat(rows).map(r => r.map(v => {
+    const s = String(v ?? '');
+    return /[;"\\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(';'));
+  const blob = new Blob(['\uFEFF' + lines.join('\\r\\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename.replace(/\\.xlsx$/i, '.csv');
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+async function downloadChartExcel(id) {
+  const t = chartTables[id];
+  if (!t) { showToast('Sin datos para exportar'); return; }
+  const filename = (id || 'grafico') + '.xlsx';
+  try {
+    const XLSX = await loadXlsxLib();
+    const ws = XLSX.utils.aoa_to_sheet([t.headers, ...t.rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, safeSheetName(id));
+    XLSX.writeFile(wb, filename);
+    showToast('Excel descargado');
+  } catch (e) {
+    downloadRowsCsv(t.headers, t.rows, filename);
+    showToast('Descargado como CSV');
+  }
+}
+async function downloadAllChartExcel(filename) {
+  const entries = Object.entries(chartTables).filter(([, t]) => t && t.headers && t.headers.length);
+  if (!entries.length) { showToast('Sin tablas para exportar'); return; }
+  const fname = filename || 'resumen_cantidad.xlsx';
+  try {
+    const XLSX = await loadXlsxLib();
+    const wb = XLSX.utils.book_new();
+    const used = new Set();
+    entries.forEach(([id, t]) => {
+      let name = safeSheetName(id);
+      let n = 2;
+      while (used.has(name)) { name = safeSheetName(id.slice(0, 28) + '_' + n); n += 1; }
+      used.add(name);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([t.headers, ...t.rows]), name);
+    });
+    XLSX.writeFile(wb, fname);
+    showToast('Excel descargado');
+  } catch (e) {
+    entries.forEach(([id, t]) => downloadRowsCsv(t.headers, t.rows, id + '.csv'));
+    showToast('Descargado como CSV');
+  }
+}
 document.addEventListener('click', (ev) => {
-  const btn = ev.target.closest('[data-mode],[data-copy],[data-copy-image]');
+  const btn = ev.target.closest('[data-mode],[data-copy],[data-copy-image],[data-excel],[data-excel-all]');
   if (!btn) return;
+  if (btn.dataset.excelAll) { downloadAllChartExcel(btn.dataset.excelAll); return; }
+  if (btn.dataset.excel) { downloadChartExcel(btn.dataset.excel); return; }
   if (btn.dataset.copyImage) { copyElementAsImage(btn.dataset.copyImage); return; }
   if (btn.dataset.copy) { copyTable(btn.dataset.copy); return; }
   if (btn.dataset.mode) setPanelMode(btn.dataset.target, btn.dataset.mode);
@@ -539,10 +605,19 @@ document.addEventListener('keydown', (e) => {
 """
 
 
-def panel_chart(title: str, desc: str, canvas_id: str, height_class: str = "") -> str:
-    """Panel con herramientas Gráfico / Tabla / Copiar."""
+def panel_chart(title: str, desc: str, canvas_id: str, height_class: str = "", excel: bool = False) -> str:
+    """Panel con herramientas Gráfico / Tabla / Copiar (y Excel opcional)."""
     h = f"chart-box {height_class}".strip() if height_class else "chart-box"
-    height = "270px" if height_class == "sm" else ("400px" if height_class == "tall" else "310px")
+    height = (
+        "270px" if height_class == "sm"
+        else "400px" if height_class == "tall"
+        else "460px" if height_class == "xtall"
+        else "310px"
+    )
+    extra = (
+        f'\n            <button type="button" data-excel="{canvas_id}">Excel</button>'
+        if excel else ""
+    )
     return f"""
       <div class="panel" data-panel="{canvas_id}">
         <div class="panel-head">
@@ -553,7 +628,7 @@ def panel_chart(title: str, desc: str, canvas_id: str, height_class: str = "") -
           <div class="panel-tools">
             <button type="button" class="on" data-mode="chart" data-target="{canvas_id}">Gráfico</button>
             <button type="button" data-mode="table" data-target="{canvas_id}">Tabla</button>
-            <button type="button" data-copy="{canvas_id}">Copiar</button>
+            <button type="button" data-copy="{canvas_id}">Copiar</button>{extra}
           </div>
         </div>
         <div class="{h}" style="height:{height}"><canvas id="{canvas_id}"></canvas></div>

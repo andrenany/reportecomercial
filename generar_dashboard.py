@@ -694,6 +694,7 @@ def _nav(active: str) -> str:
         <a class="{cls('dash')}" href="dashboard_facturacion.html">Unificado</a>
         <a class="{cls('excel')}" href="dashboard_facturacion_excel.html">Solo facturación</a>
         <a class="{cls('sql')}" href="consulta_facturacion.html">Consulta facturación</a>
+        <a class="{cls('cantidad')}" href="resumen_cantidad.html">Resumen cantidad</a>
         <a class="{cls('reglas')}" href="reglas.html">Reglas</a>
         <button type="button" class="btn-mail" onclick="solicitarActualizacion(this)">Solicitar actualización</button>
         <button type="button" class="chip" style="border-radius:999px;padding:9px 14px" onclick="adlLogout()">Salir</button>
@@ -764,7 +765,6 @@ def render_dashboard(payload: dict) -> str:
     <button class="active" data-tab="vista-ventas">Ventas / Tipo ingreso</button>
     <button data-tab="vista-empresas">Empresas</button>
     <button data-tab="vista-pendiente">Pendiente facturar</button>
-    <button data-tab="vista-ciclo">Ciclo clientes</button>
     <button data-tab="vista-detalle">Detalle</button>
   </div>
 
@@ -787,7 +787,7 @@ def render_dashboard(payload: dict) -> str:
   </section>
 
   <section id="vista-pendiente" class="section">
-    <p class="hint-multi" style="margin:0 0 10px">Solo estado <strong>Falta OC/HES</strong>. Barras apiladas por mes · tabla pivote Cliente × Mes (todas las empresas del filtro).</p>
+    <p class="hint-multi" style="margin:0 0 10px">Solo estado <strong>Falta OC/HES</strong>. Barras apiladas por mes · tabla pivote Cliente × Mes. El ciclo de clientes usa los <strong>últimos 2 años</strong> (no el histórico completo).</p>
     <div class="panel">
       <div class="panel-head">
         <div class="titles">
@@ -822,16 +822,16 @@ def render_dashboard(payload: dict) -> str:
         </table>
       </div>
     </div>
-  </section>
-
-  <section id="vista-ciclo" class="section">
+    <h2 style="margin:22px 0 8px;font-family:Manrope,sans-serif;font-size:1.05rem;color:var(--adl-navy)">Ciclo de clientes · últimos 2 años</h2>
+    <p class="hint-multi" style="margin:0 0 10px">Promedio prefactura → factura de OC facturadas en <span id="ciclo-rango">los últimos 2 años</span>. No usa el histórico completo. Respeta tipo, cliente, programa y fuente; no el filtro de año/mes.</p>
     <div class="grid">
-      {panel_chart("Días promedio pre-factura → factura", "Solo OC facturadas con ambas fechas (0–730 d). Rápido ≤30 · Normal 31–60 · Lento 61–90 · Crítico &gt;90.", "chartCiclo", "tall")}
-      {panel_chart("Categoría de clientes", "Según velocidad de facturación.", "chartCat", "sm")}
+      {panel_chart("Días promedio pre-factura → factura", "OC facturadas con ambas fechas (0–730 d), últimos 2 años. Rápido ≤30 · Normal 31–60 · Lento 61–90 · Crítico &gt;90.", "chartCiclo", "tall")}
+      {panel_chart("Categoría de clientes", "Según velocidad de facturación de los últimos 2 años.", "chartCat", "sm")}
     </div>
     <div id="cat-resumen" style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0"></div>
     <div class="panel" style="margin-top:12px">
       <h2>Ranking de ciclo</h2>
+      <p class="desc" style="margin:0 0 8px">Últimos 2 años · OC facturadas con fechas</p>
       <div class="scroll">
         <table>
           <thead><tr>
@@ -932,7 +932,9 @@ function fillFilters() {{
   fillMulti('f-estado', estados, [], estLab);
   fillMulti('f-fuente', uniqueSorted(rows.map(r => r.fuente)));
 }}
-function applyFilters(rows) {{
+function applyFilters(rows, opts) {{
+  const skipPeriodo = opts && opts.skipPeriodo;
+  const skipEstado = opts && opts.skipEstado;
   const anios = selectedMulti('f-anio').map(String);
   const meses = selectedMulti('f-mes').map(String);
   const clientes = selectedMulti('f-cliente');
@@ -941,14 +943,30 @@ function applyFilters(rows) {{
   const fuentes = selectedMulti('f-fuente');
   return rows.filter(r => {{
     if (tiposSel.size && !tiposSel.has(r.tipo)) return false;
-    if (anios.length && !anios.includes(String(r.anio_venta))) return false;
-    if (meses.length && !meses.includes(String(r.mes_venta))) return false;
+    if (!skipPeriodo) {{
+      if (anios.length && !anios.includes(String(r.anio_venta))) return false;
+      if (meses.length && !meses.includes(String(r.mes_venta))) return false;
+    }}
     if (clientes.length && !clientes.includes(r.cliente_corto)) return false;
     if (programas.length && !programas.includes(r.programa)) return false;
-    if (estados.length && !estados.includes(r.estado_venta)) return false;
+    if (!skipEstado && estados.length && !estados.includes(r.estado_venta)) return false;
     if (fuentes.length && !fuentes.includes(r.fuente)) return false;
     return true;
   }});
+}}
+function anioCicloMax() {{
+  return Number(String(RAW.generado || '').slice(0,4)) || new Date().getFullYear();
+}}
+function anioCicloMin() {{
+  return anioCicloMax() - 1;
+}}
+function labelCicloRango() {{
+  return anioCicloMin() + '–' + anioCicloMax();
+}}
+function rowsCiclo() {{
+  const minA = anioCicloMin();
+  return applyFilters(RAW.ventas, {{ skipPeriodo: true, skipEstado: true }})
+    .filter(r => Number(r.anio_venta) >= minA);
 }}
 function groupSum(rows, key) {{
   const m = new Map();
@@ -975,7 +993,8 @@ function renderKpis(rows) {{
   const pend = rows.filter(r=>r.estado_venta==='pendiente_facturar');
   const listo = rows.filter(r=>r.estado_venta==='listo_para_facturar');
   const ok = rows.filter(r=>r.estado_venta==='facturada_ok' || r.estado_venta==='facturada_sin_oc');
-  const dias = rows.map(r=>r.dias_ciclo).filter(x => x!=null && !Number.isNaN(Number(x))).map(Number);
+  const ciclo = rowsCiclo();
+  const dias = ciclo.map(r=>r.dias_ciclo).filter(x => x!=null && !Number.isNaN(Number(x))).map(Number);
   const porTipo = groupSum(rows,'tipo').sort((a,b)=>b.total-a.total);
   const topTipo = porTipo[0];
 
@@ -986,7 +1005,7 @@ function renderKpis(rows) {{
     ['Listo para facturar', fmtM(listo.reduce((a,r)=>a+r.monto,0)), listo.length + ' docs · ya tiene OC y HES', 'info'],
     ['Ya facturado', fmtM(ok.reduce((a,r)=>a+r.monto,0)), ok.length + ' docs', 'ok'],
     ['Tipo líder', topTipo ? topTipo.key : '—', topTipo ? fmtM(topTipo.total) : '', 'teal'],
-    ['Días ciclo promedio', avg(dias)==null ? '—' : avg(dias).toFixed(1) + ' d', dias.length + ' con fecha FV', 'navy'],
+    ['Días ciclo promedio', avg(dias)==null ? '—' : avg(dias).toFixed(1) + ' d', labelCicloRango() + ' · ' + dias.length + ' con fecha FV', 'navy'],
     ['Clientes', uniqueSorted(rows.map(r=>r.cliente_corto)).length, 'nombres cortos', 'info'],
   ];
   document.getElementById('kpis').innerHTML = items.map(([l,v,h,cls]) => `
@@ -1224,7 +1243,10 @@ function renderPendiente(rows) {{
   );
 }}
 
-function renderCiclo(rows) {{
+function renderCiclo() {{
+  const rows = rowsCiclo();
+  const rangoEl = document.getElementById('ciclo-rango');
+  if (rangoEl) rangoEl.textContent = labelCicloRango();
   const byCli = groupSum(rows,'cliente_corto').map(x => {{
     const prom = avg(x.dias);
     return {{ ...x, dias_promedio: prom, dias_mediana: median(x.dias), dias_p75: percentile(x.dias,75), categoria: categoria(prom), n_ciclo: x.dias.length }};
@@ -1295,7 +1317,7 @@ function refresh() {{
   renderVentas(rows);
   renderEmpresas(rows);
   renderPendiente(rows);
-  renderCiclo(rows);
+  renderCiclo();
   renderDetalle(rows);
   syncAllChartTables();
 }}
@@ -1308,6 +1330,9 @@ document.querySelectorAll('.tabs button').forEach(btn => {{
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById(btn.dataset.tab).classList.add('active');
+    requestAnimationFrame(() => {{
+      Object.values(charts).forEach(c => {{ try {{ c.resize(); }} catch (e) {{}} }});
+    }});
   }});
 }});
 document.querySelectorAll('#chips-tipo .chip').forEach(chip => {{
@@ -1398,6 +1423,8 @@ def render_reglas(generado: str) -> str:
       <h2>Ciclo y categorías</h2>
       <ul style="color:var(--muted);line-height:1.5">
         <li>Días = Fecha prefactura → Fecha factura (OC)</li>
+        <li>Se calcula con los <strong>últimos 2 años</strong> (año actual y anterior), no con todo el histórico</li>
+        <li>Los gráficos de ciclo están en la hoja <strong>Pendiente facturar</strong></li>
         <li>Rápido ≤30 · Normal 31–60 · Lento 61–90 · Crítico &gt;90</li>
       </ul>
     </div>
@@ -1413,6 +1440,18 @@ def render_reglas(generado: str) -> str:
       <li><strong>I+D / Investigación</strong>: tipo de ingreso I+D queda fuera.</li>
       <li><strong>Sede “No corresponde”</strong>: ventas de otro sector de la empresa; no se incluyen en KPIs, gráficos ni detalle.</li>
       <li>Estas exclusiones aplican al dashboard unificado y al de solo facturación.</li>
+    </ul>
+  </div>
+
+  <div class="panel" style="margin-top:12px">
+    <h2>Resumen cantidad (SQL / diagnóstico)</h2>
+    <ul style="color:var(--muted);line-height:1.5">
+      <li>Réplica de la página Power BI <strong>Resumen Cantidad</strong>, sin modificar el .pbix.</li>
+      <li>Fuente: <code>dbo.vw_FVivaldiWebSalud</code>. Cantidad = suma de <code>fac_n_analisis</code> por <code>fecha_recepcion</code>.</li>
+      <li>Filtros: empresa (<code>nombre_empresaservicios</code>), sede (<code>nombre_lugaranalisis</code>), unidad (<code>nombre_seccion</code>), calendario (año/mes) y programa.</li>
+      <li>Periodo anterior = mismos meses del año previo. El gráfico por año no usa el filtro de calendario.</li>
+      <li>Se excluyen empresas internas ADL Diagnostic y técnicas ELF (mismo criterio de la página BI).</li>
+      <li>Cada gráfico se puede ver como tabla y descargar a Excel.</li>
     </ul>
   </div>
 
