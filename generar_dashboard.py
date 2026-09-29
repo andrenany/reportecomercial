@@ -826,7 +826,7 @@ def render_dashboard(payload: dict) -> str:
     <div style="margin-top:12px">
     {panel_chart(
         "Evolutivo · foto del 28 (solo blanco / Falta OC-HES)",
-        "Cada punto es el stock abierto ese día, no la fecha del servicio. Desde el 28 de cada mes, al regenerar el dashboard se guarda una foto nueva. El histórico previo es reconstruido.",
+        "Cada punto es el stock abierto ese día, no la fecha del servicio. Desde el 28 de cada mes, al regenerar el dashboard se guarda una foto nueva. El histórico (azul claro) se reconstruye con la Fecha al lado de N° FV: si se facturó después del 28, ese día todavía no estaba facturada.",
         "chartFotosPend",
         excel=True,
     )}
@@ -1489,7 +1489,7 @@ def render_reglas(generado: str) -> str:
         <li>Verde → <strong>Ya facturada</strong></li>
         <li>Rojo / naranja → <strong>Anulada</strong></li>
         <li>El archivo fuente se llama “pendientes”, pero incluye todo el ciclo (también facturado)</li>
-        <li><strong>Foto del 28:</strong> al regenerar el dashboard desde el día 28 se guarda el stock de filas en blanco (Falta OC/HES). Baja la barra = se consiguió OC/HES. El azul claro del gráfico es histórico reconstruido; el navy es foto real.</li>
+        <li><strong>Foto del 28:</strong> al regenerar el dashboard desde el día 28 se guarda el stock de filas en blanco (Falta OC/HES). Baja la barra = se consiguió OC/HES. El navy es foto real. El azul claro se reconstruye: el servicio ya existía y la Fecha al lado de N° FV es posterior al 28 (aún no facturada). Si en Observaciones hay OC anterior al 28, no se cuenta como blanco.</li>
       </ul>
     </div>
     <div class="panel">

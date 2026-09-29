@@ -4,6 +4,8 @@ Fotos mensuales del stock en blanco (Falta OC/HES).
 
 El 28 de cada mes (o el primer generate desde el 28) se guarda una foto
 del pendiente de facturar. Las fotos se acumulan en fotos_pendiente_blanco.json.
+El histórico se reconstruye con la Fecha al lado de N° FV: si se facturó
+después del corte, ese día aún no estaba facturada.
 """
 from __future__ import annotations
 
@@ -84,6 +86,13 @@ def _preparar_oc_blanco(oc: pd.DataFrame) -> pd.DataFrame:
     out = out[out["estado"] != "anulada"].copy()
     out["monto"] = pd.to_numeric(out["Total_num"], errors="coerce").fillna(0)
     out["fecha_oc"] = out["Observaciones"].map(_fecha_oc_obs)
+    # Fecha al lado de N° FV (columna Fecha de factura en el Excel)
+    if "Fecha_doc" in out.columns:
+        out["fecha_fv"] = limpiar_fecha(out["Fecha_doc"])
+        fv = out["fecha_fv"]
+        out.loc[(fv < "2018-01-01") | (fv > "2027-12-31"), "fecha_fv"] = pd.NaT
+    else:
+        out["fecha_fv"] = pd.NaT
     return out
 
 
@@ -94,7 +103,10 @@ def reconstruir_blanco_al(oc: pd.DataFrame, d: date) -> tuple[float, int]:
     existe = base["Fecha_limpia"].notna() & (base["Fecha_limpia"] <= ts)
     sigue_blanco = base["estado"] == "pendiente_facturar"
     gano_oc_despues = base["fecha_oc"].notna() & (base["fecha_oc"] > ts)
-    mask = existe & (sigue_blanco | gano_oc_despues)
+    # Si la FV (fecha al lado de N° FV) es posterior al 28, ese día aún no estaba facturada.
+    facturo_despues = base["fecha_fv"].notna() & (base["fecha_fv"] > ts)
+    tenia_oc = base["fecha_oc"].notna() & (base["fecha_oc"] <= ts)
+    mask = existe & (sigue_blanco | gano_oc_despues | (facturo_despues & ~tenia_oc))
     sub = base.loc[mask]
     return float(sub["monto"].sum()), int(len(sub))
 
@@ -123,8 +135,6 @@ def sembrar_reconstruidas(fotos: list[dict], oc: pd.DataFrame, hoy: date) -> lis
         per = _periodo(d)
         actual = por_periodo.get(per)
         if actual and actual.get("origen") == "foto":
-            continue
-        if actual and actual.get("origen") == "reconstruido":
             continue
         monto, n = reconstruir_blanco_al(oc, d)
         por_periodo[per] = {
