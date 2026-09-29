@@ -1,0 +1,108 @@
+{
+  "fotos": [
+    {
+      "periodo": "2025-09",
+      "fecha_foto": "2025-09-28",
+      "tomada": null,
+      "monto": 142560534.0,
+      "n": 118,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2025-10",
+      "fecha_foto": "2025-10-28",
+      "tomada": null,
+      "monto": 97930622.0,
+      "n": 75,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2025-11",
+      "fecha_foto": "2025-11-28",
+      "tomada": null,
+      "monto": 149366321.0,
+      "n": 129,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2025-12",
+      "fecha_foto": "2025-12-28",
+      "tomada": null,
+      "monto": 62044286.0,
+      "n": 40,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2026-01",
+      "fecha_foto": "2026-01-28",
+      "tomada": null,
+      "monto": 29283205.0,
+      "n": 29,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2026-02",
+      "fecha_foto": "2026-02-28",
+      "tomada": null,
+      "monto": 150393713.0,
+      "n": 121,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2026-03",
+      "fecha_foto": "2026-03-28",
+      "tomada": null,
+      "monto": 111940340.0,
+      "n": 79,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2026-04",
+      "fecha_foto": "2026-04-28",
+      "tomada": null,
+      "monto": 47066829.0,
+      "n": 50,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2026-05",
+      "fecha_foto": "2026-05-28",
+      "tomada": null,
+      "monto": 59263592.0,
+      "n": 42,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2026-06",
+      "fecha_foto": "2026-06-28",
+      "tomada": null,
+      "monto": 89824232.0,
+      "n": 45,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2026-07",
+      "fecha_foto": "2026-07-28",
+      "tomada": null,
+      "monto": 122668212.0,
+      "n": 94,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2026-08",
+      "fecha_foto": "2026-08-28",
+      "tomada": null,
+      "monto": 79159530.0,
+      "n": 89,
+      "origen": "reconstruido"
+    },
+    {
+      "periodo": "2026-09",
+      "fecha_foto": "2026-09-28",
+      "tomada": "2026-09-29 15:28",
+      "monto": 68629784.0,
+      "n": 71,
+      "origen": "foto"
+    }
+  ]
+}

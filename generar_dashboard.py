@@ -31,6 +31,7 @@ from leer_oc_pendientes import (
 )
 from chart_tools import CSS_CHART_TOOLS, JS_CHART_TOOLS, panel_chart
 from render_excel_dashboard import render_dashboard_excel as render_dashboard_excel_views
+from fotos_pendiente import actualizar_fotos_pendiente
 
 EXCEL_PROGRAMAS = (
     r"\\192.168.10.5\adl.ws\Disco I\PM\COM\Carpeta compartida comercial"
@@ -787,7 +788,7 @@ def render_dashboard(payload: dict) -> str:
   </section>
 
   <section id="vista-pendiente" class="section">
-    <p class="hint-multi" style="margin:0 0 10px">Solo estado <strong>Falta OC/HES</strong>. Barras apiladas por mes · tabla pivote Cliente × Mes. El ciclo de clientes usa los <strong>últimos 2 años</strong> (no el histórico completo).</p>
+    <p class="hint-multi" style="margin:0 0 10px">Solo estado <strong>Falta OC/HES</strong> (filas en blanco). Barras apiladas por mes · tabla pivote Cliente × Mes. El ciclo de clientes usa los <strong>últimos 2 años</strong> (no el histórico completo).</p>
     <div class="panel">
       <div class="panel-head">
         <div class="titles">
@@ -821,6 +822,14 @@ def render_dashboard(payload: dict) -> str:
           <tfoot id="pend-tfoot"></tfoot>
         </table>
       </div>
+    </div>
+    <div style="margin-top:12px">
+    {panel_chart(
+        "Evolutivo · foto del 28 (solo blanco / Falta OC-HES)",
+        "Cada punto es el stock abierto ese día, no la fecha del servicio. Desde el 28 de cada mes, al regenerar el dashboard se guarda una foto nueva. El histórico previo es reconstruido.",
+        "chartFotosPend",
+        excel=True,
+    )}
     </div>
     <h2 style="margin:22px 0 8px;font-family:Manrope,sans-serif;font-size:1.05rem;color:var(--adl-navy)">Ciclo de clientes · últimos 2 años</h2>
     <p class="hint-multi" style="margin:0 0 10px">Promedio prefactura → factura de OC facturadas en <span id="ciclo-rango">los últimos 2 años</span>. No usa el histórico completo. Respeta tipo, cliente, programa y fuente; no el filtro de año/mes.</p>
@@ -1243,6 +1252,68 @@ function renderPendiente(rows) {{
   );
 }}
 
+function renderFotosPendiente() {{
+  const fotos = (RAW.fotos_pendiente || []).slice().sort((a,b) => String(a.periodo).localeCompare(String(b.periodo)));
+  const el = document.getElementById('chartFotosPend');
+  if (!el) return;
+  const labels = fotos.map(f => {{
+    const [y,m] = String(f.periodo||'').split('-').map(Number);
+    return '28-' + (MESES[m]||m) + ' ' + y;
+  }});
+  const montos = fotos.map(f => Number(f.monto)||0);
+  charts.fotosPend = new Chart(el, {{
+    type: 'bar',
+    data: {{
+      labels,
+      datasets: [{{
+        type: 'bar',
+        label: 'Falta OC/HES (blanco)',
+        data: montos,
+        backgroundColor: fotos.map(f => f.origen === 'foto' ? '#003E6D' : '#70BBFF'),
+        borderRadius: 6,
+        maxBarThickness: 34,
+      }}, {{
+        type: 'line',
+        label: 'Evolutivo',
+        data: montos,
+        borderColor: '#F37021',
+        backgroundColor: '#F37021',
+        tension: .25,
+        pointRadius: 4,
+        borderWidth: 2.4,
+      }}]
+    }},
+    options: {{
+      responsive: true, maintainAspectRatio: false,
+      plugins: {{
+        legend: {{ position: 'bottom' }},
+        tooltip: {{
+          callbacks: {{
+            label(c) {{
+              const f = fotos[c.dataIndex] || {{}};
+              const orig = f.origen === 'foto' ? 'foto real' : 'reconstruida';
+              return fmtM(c.raw) + ' · ' + (f.n||0) + ' docs · ' + orig;
+            }}
+          }}
+        }},
+        datalabels: {{
+          display: (ctx) => ctx.dataset.type !== 'line' && (Number(ctx.dataset.data[ctx.dataIndex])||0) > 0,
+          formatter: (v) => fmtM(v),
+          color: '#102A43', font: {{ size: 9, weight: '700' }}, anchor: 'end', align: 'top',
+        }}
+      }},
+      scales: {{
+        y: {{ beginAtZero: true, ticks: {{ callback: v => fmtM(v), color:'#627D98' }}, grid: {{ color:'#E4EBF2' }} }},
+        x: {{ ticks: {{ color:'#102A43', font: {{ size: 10 }} }}, grid: {{ display: false }} }}
+      }}
+    }}
+  }});
+  registerChartTable('chartFotosPend',
+    ['Periodo', 'Fecha foto', 'Monto', 'Docs', 'Origen'],
+    fotos.map(f => [f.periodo, f.fecha_foto||'', Number(f.monto)||0, f.n||0, f.origen === 'foto' ? 'Foto real' : 'Reconstruida'])
+  );
+}}
+
 function renderCiclo() {{
   const rows = rowsCiclo();
   const rangoEl = document.getElementById('ciclo-rango');
@@ -1317,6 +1388,7 @@ function refresh() {{
   renderVentas(rows);
   renderEmpresas(rows);
   renderPendiente(rows);
+  renderFotosPendiente();
   renderCiclo();
   renderDetalle(rows);
   syncAllChartTables();
@@ -1417,6 +1489,7 @@ def render_reglas(generado: str) -> str:
         <li>Verde → <strong>Ya facturada</strong></li>
         <li>Rojo / naranja → <strong>Anulada</strong></li>
         <li>El archivo fuente se llama “pendientes”, pero incluye todo el ciclo (también facturado)</li>
+        <li><strong>Foto del 28:</strong> al regenerar el dashboard desde el día 28 se guarda el stock de filas en blanco (Falta OC/HES). Baja la barra = se consiguió OC/HES. El azul claro del gráfico es histórico reconstruido; el navy es foto real.</li>
       </ul>
     </div>
     <div class="panel">
@@ -1509,6 +1582,9 @@ def main() -> None:
     print("Unificando ventas + tipos de ingreso...")
     ventas = construir_ventas_unificadas(oc, fac, mapa_prog)
 
+    print("Fotos pendiente en blanco (día 28)...")
+    fotos_pendiente = actualizar_fotos_pendiente(oc, ventas)
+
     print("Armando dashboard Solo facturación (fuente: Juan consolidado)...")
     ventas_fac = construir_ventas_facturacion_excel(fac, mapa_prog)
     v26 = ventas_fac[pd.to_numeric(ventas_fac["anio_venta"], errors="coerce") == 2026]
@@ -1544,6 +1620,7 @@ def main() -> None:
             ALIAS_SIN_OC.get(normalizar_texto(x), normalizar_texto(x))
             for x in EMPRESAS_SIN_OC_RAW
         ],
+        "fotos_pendiente": fotos_pendiente,
     }
     payload_fac = {
         "generado": generado,
