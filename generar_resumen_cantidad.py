@@ -4,13 +4,14 @@ Replica la página Power BI «Resumen Cantidad» (solo lectura).
 
 No modifica el .pbix. Fuente SQL: dbo.vw_FVivaldiWebSalud (credenciales.env).
 
-Filtros de UI: empresa, sede, unidad, calendario (año/mes), programa.
+Filtros de UI: empresa, sede, unidad, calendario (año/mes), programa, técnica acortada.
 Cantidad = SUM(fac_n_analisis) por fecha_recepcion.
 """
 from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
@@ -48,10 +49,10 @@ REGLAS_HTML = """
       <ul>
         <li><strong>Cantidad de análisis</strong> = suma de <code>fac_n_analisis</code> de cada fila. No es el recuento de filas ni de casos.</li>
         <li>Una misma recepción puede aportar más de un análisis si <code>fac_n_analisis</code> &gt; 1.</li>
-        <li>Periodo actual = filtros de calendario (año/mes) + empresa + sede + unidad + programa.</li>
+        <li>Periodo actual = filtros de calendario (año/mes) + empresa + sede + unidad + programa + técnica acortada.</li>
         <li>Periodo anterior = mismos meses, un año antes. Si no eliges mes y el año actual llega p. ej. hasta septiembre, el anterior es enero–septiembre del año previo (no el año completo).</li>
         <li>Variación = actual − anterior. % variación = variación / anterior.</li>
-        <li>El gráfico <strong>Por año</strong> no usa el filtro de calendario; sí empresa, sede, unidad y programa.</li>
+        <li>El gráfico <strong>Por año</strong> no usa el filtro de calendario; sí empresa, sede, unidad, programa y técnica acortada.</li>
         <li>Si el calendario cubre más de un año, las tablas Excel de meses incluyen el año en cada fila (p. ej. Enero 2025, Enero 2026).</li>
       </ul>
       <h4>Filtros de esta página</h4>
@@ -61,6 +62,7 @@ REGLAS_HTML = """
         <li><strong>Unidad</strong> ← <code>nombre_seccion</code> (Biología molecular, bacteriología, microscopía, costo operativo, etc.).</li>
         <li><strong>Calendario</strong> ← año y mes de <code>fecha_recepcion</code>. Vacío = todos.</li>
         <li><strong>Programa</strong> ← <code>nombre_programa</code>.</li>
+        <li><strong>Técnica (acortada)</strong> ← <code>nombre_tecnica</code> sin el prefijo RT-PCR / PCR (mismo criterio del campo Power BI «Técnica Acortada»). Ej.: <em>RT-PCR ISAV</em> → <em>ISAV</em>.</li>
         <li>Multi-selección: vacío = todos los valores (salvo las exclusiones fijas de abajo).</li>
       </ul>
     </div>
@@ -154,6 +156,17 @@ def internar(listas: dict[str, list[str]], clave: str, valor: str) -> int:
         idx[valor] = len(listas[clave])
         listas[clave].append(valor)
     return idx[valor]
+
+
+_RE_PCR_PREF = re.compile(r"^(?:RT[\s\-]?PCR|PCR)[\s\-]+", re.IGNORECASE)
+
+
+def tecnica_acortada(nombre: str) -> str:
+    """Quita RT-PCR / PCR al inicio, como el campo Power BI Técnica Acortada."""
+    t = nz(nombre, "(sin tecnica)")
+    s = _RE_PCR_PREF.sub("", t).strip()
+    s = re.sub(r"\s+", " ", s)
+    return s or t
 
 
 def es_elf(tecnica: str) -> bool:
@@ -378,6 +391,7 @@ def consultar_cantidad(cur, vista: str) -> dict:
         rows.append(fila)
         anios.add(int(anio))
 
+    dims["ta"] = [tecnica_acortada(x) for x in dims["t"]]
     del dims["_map"]
     anio_obj = datetime.now().year
     print("  · proyección Prophet...")
@@ -400,7 +414,7 @@ def render_html(payload: dict) -> str:
     data = json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
     p_anio = panel_chart(
         "Por año",
-        "Evolución de la cantidad de análisis. No aplica el filtro de calendario (año/mes), sí empresa, sede, unidad y programa.",
+        "Evolución de la cantidad de análisis. No aplica el filtro de calendario (año/mes), sí empresa, sede, unidad, programa y técnica acortada.",
         "cAnio",
         excel=True,
     )
@@ -517,13 +531,36 @@ body {{
 .subhead p {{ margin:4px 0 0; color:var(--teal); font-size:.85rem; font-weight:600; }}
 .meta {{ color:var(--muted); font-size:.78rem; text-align:right; line-height:1.45; }}
 .filters {{
-  display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;
-  background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:16px;
+  display:flex; flex-wrap:wrap; gap:6px 8px; align-items:flex-end;
+  background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:8px 10px 10px;
   margin-bottom:14px; position:relative; z-index:30;
   box-shadow:0 4px 16px rgba(0,62,109,.05);
 }}
-.filters label.f {{ display:flex; flex-direction:column; gap:5px; font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); min-width:160px; flex:1; }}
-.filters .hint-multi {{ width:100%; font-size:.72rem; color:var(--muted); margin:0; text-transform:none; letter-spacing:0; font-weight:400; }}
+.filters .f {{
+  display:flex; flex-direction:column; gap:3px;
+}}
+.filters label.f {{
+  font-size:.62rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--muted);
+  min-width:108px; flex:1 1 108px; max-width:168px;
+}}
+.filters .hint-multi {{ flex:1 1 100%; width:100%; font-size:.64rem; color:var(--muted); margin:0 0 2px; text-transform:none; letter-spacing:0; font-weight:400; line-height:1.3; }}
+.filters .msel-btn {{
+  padding:5px 22px 5px 8px; border-radius:8px; font-size:.75rem;
+  background-position: right 7px center; background-size: 8px;
+}}
+.filters .msel-panel {{ min-width: 210px; border-radius:10px; padding:6px; }}
+.filters .msel-q {{ padding:5px 8px; font-size:.75rem; margin-bottom:4px; }}
+.filters .msel-opt {{ padding:4px 6px; font-size:.78rem; gap:6px; }}
+.filters .msel-foot button {{ padding:4px 6px; font-size:.66rem; }}
+.filters .chip {{ padding:5px 11px !important; font-size:.75rem; }}
+.filters select {{
+  border:1px solid var(--line); border-radius:8px; padding:5px 8px;
+  font:inherit; font-size:.75rem; color:var(--ink); background:#fff;
+}}
+.filters .f-excel {{ min-width:auto; max-width:none; flex:0 0 auto; }}
+.filters .f-excel span {{
+  font-size:.62rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--muted);
+}}
 .kpis {{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; margin-bottom:14px; }}
 @media (max-width:1100px) {{ .kpis {{ grid-template-columns:repeat(2, minmax(0, 1fr)); }} }}
 .kpi {{
@@ -578,6 +615,31 @@ body {{
 .proy-note {{ color:var(--muted); font-size:.82rem; margin:0 0 12px; line-height:1.45; }}
 footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px; }}
 {CSS_CHART_TOOLS}
+.filters .hint-multi {{
+  flex:1 1 100%; width:100%; font-size:.64rem; color:var(--muted);
+  margin:0 0 2px; text-transform:none; letter-spacing:0; font-weight:400; line-height:1.3;
+}}
+.filters .f {{ display:flex; flex-direction:column; gap:3px; }}
+.filters label.f {{
+  min-width:108px; flex:1 1 108px; max-width:168px; font-size:.62rem;
+}}
+.filters .msel-btn {{
+  padding:5px 22px 5px 8px; border-radius:8px; font-size:.75rem;
+  background-position: right 7px center; background-size: 8px;
+}}
+.filters .msel-panel {{ min-width:210px; border-radius:10px; padding:6px; }}
+.filters .msel-q {{ padding:5px 8px; font-size:.75rem; margin-bottom:4px; }}
+.filters .msel-opt {{ padding:4px 6px; font-size:.78rem; gap:6px; }}
+.filters .msel-foot button {{ padding:4px 6px; font-size:.66rem; }}
+.filters .chip {{ padding:5px 11px !important; font-size:.75rem; }}
+.filters select {{
+  border:1px solid var(--line); border-radius:8px; padding:5px 8px;
+  font:inherit; font-size:.75rem; color:var(--ink); background:#fff;
+}}
+.filters .f-excel {{ min-width:auto; max-width:none; flex:0 0 auto; }}
+.filters .f-excel span {{
+  font-size:.62rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--muted);
+}}
 </style>
 </head>
 <body>
@@ -614,12 +676,13 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
     <label class="f">Empresa<div class="msel" id="f-empresa" data-empty="Todas"></div></label>
     <label class="f">Sede<div class="msel" id="f-sede" data-empty="Todas"></div></label>
     <label class="f">Unidad<div class="msel" id="f-unidad" data-empty="Todas"></div></label>
-    <label class="f">Calendario · año<div class="msel" id="f-anio" data-empty="Todos"></div></label>
-    <label class="f">Calendario · mes<div class="msel" id="f-mes" data-empty="Todos"></div></label>
+    <label class="f">Año<div class="msel" id="f-anio" data-empty="Todos"></div></label>
+    <label class="f">Mes<div class="msel" id="f-mes" data-empty="Todos"></div></label>
     <label class="f">Programa<div class="msel" id="f-programa" data-empty="Todos"></div></label>
-    <div class="f" style="min-width:200px;text-transform:none">
-      <span style="font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)">Excel</span>
-      <button type="button" class="chip" data-excel-all="resumen_cantidad.xlsx" style="border-radius:999px;padding:10px 14px;background:var(--ok);color:#fff;border-color:var(--ok);text-transform:none">Descargar todas las tablas</button>
+    <label class="f">Técnica acortada<div class="msel" id="f-tecnica" data-empty="Todas"></div></label>
+    <div class="f f-excel" style="text-transform:none">
+      <span>Excel</span>
+      <button type="button" class="chip" data-excel-all="resumen_cantidad.xlsx" style="border-radius:999px;background:var(--ok);color:#fff;border-color:var(--ok);text-transform:none">Descargar tablas</button>
     </div>
   </div>
 
@@ -650,13 +713,13 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
     <div class="filters">
       <p class="proy-note">Algoritmo: Prophet (Meta). Se entrena al generar esta página, sin ELF ni empresas ADL. Vacío en sede y programa = modelo del total. Si filtras, cada corte tiene su propio modelo (con varios, se suman). Fondo = real; punteada = pronóstico.</p>
       <label class="f">Año a proyectar
-        <select id="f-proy-anio" style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;color:var(--ink);background:#fff"></select>
+        <select id="f-proy-anio"></select>
       </label>
       <label class="f">Sede<div class="msel" id="f-proy-sede" data-empty="Todas"></div></label>
       <label class="f">Programa<div class="msel" id="f-proy-programa" data-empty="Todos"></div></label>
-      <div class="f" style="min-width:200px;text-transform:none">
-        <span style="font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)">Excel</span>
-        <button type="button" class="chip" data-excel="cProy" style="border-radius:999px;padding:10px 14px;background:var(--ok);color:#fff;border-color:var(--ok);text-transform:none">Descargar proyección</button>
+      <div class="f f-excel" style="text-transform:none">
+        <span>Excel</span>
+        <button type="button" class="chip" data-excel="cProy" style="border-radius:999px;background:var(--ok);color:#fff;border-color:var(--ok);text-transform:none">Descargar proyección</button>
       </div>
     </div>
     <div class="kpis" id="kpis-proy"></div>
@@ -684,7 +747,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li><strong>Sede</strong> y <strong>Programa</strong> vacíos: un solo modelo Prophet sobre el total.</li>
         <li>Solo sede, o solo programa: cada valor elegido tiene su propio modelo; si marcas varios, se suman real y pronóstico.</li>
         <li>Sede y programa a la vez: se usa el modelo de cada combinación sede×programa (no es el producto de los dos filtros por separado).</li>
-        <li>Empresa, unidad y calendario de la hoja Análisis no aplican aquí.</li>
+        <li>Empresa, unidad, técnica y calendario de la hoja Análisis no aplican aquí.</li>
       </ul>
     </div>
   </div>
@@ -740,6 +803,7 @@ function currentFilters() {{
     anio: new Set(selectedMulti('f-anio').map(Number)),
     mes: new Set(selectedMulti('f-mes').map(Number)),
     prog: new Set(selectedMulti('f-programa')),
+    tec: new Set(selectedMulti('f-tecnica')),
   }};
 }}
 function passDims(r, f) {{
@@ -748,6 +812,7 @@ function passDims(r, f) {{
   if (f.sede.size && !f.sede.has(D.s[r[3]])) return false;
   if (f.unid.size && !f.unid.has(D.u[r[4]])) return false;
   if (f.prog.size && !f.prog.has(D.p[r[5]])) return false;
+  if (f.tec.size && !f.tec.has((D.ta || D.t)[r[6]])) return false;
   return true;
 }}
 function passCal(r, f) {{
@@ -814,6 +879,7 @@ function fillFilters() {{
     anio: selectedMulti('f-anio'),
     mes: selectedMulti('f-mes'),
     prog: selectedMulti('f-programa'),
+    tec: selectedMulti('f-tecnica'),
   }};
   const anios = (RAW.anios || []).map(String);
   const defAnio = String(RAW.anio_default || anios[anios.length-1] || '');
@@ -824,6 +890,7 @@ function fillFilters() {{
   fillMulti('f-anio', anios, preAnio);
   fillMulti('f-mes', MESES.map((_,i) => String(i+1)), prev.mes, Object.fromEntries(MESES.map((n,i)=>[String(i+1), n])));
   fillMulti('f-programa', uniqueSorted(D.p), prev.prog);
+  fillMulti('f-tecnica', uniqueSorted(D.ta || D.t), prev.tec);
 }}
 
 function render() {{
@@ -1083,7 +1150,7 @@ function render() {{
 }}
 
 fillFilters();
-['f-empresa','f-sede','f-unidad','f-anio','f-mes','f-programa'].forEach(id => {{
+['f-empresa','f-sede','f-unidad','f-anio','f-mes','f-programa','f-tecnica'].forEach(id => {{
   document.getElementById(id).addEventListener('change', render);
 }});
 render();

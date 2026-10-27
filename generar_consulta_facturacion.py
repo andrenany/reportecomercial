@@ -137,6 +137,37 @@ def analizar(cur, vista: str) -> dict:
         """,
     )
 
+    print("  · índice de casos (caso → día de muestreo)...")
+    casos = consultar(
+        cur,
+        f"""
+        SELECT
+            LTRIM(RTRIM(caso_adlab)) AS caso,
+            CONVERT(char(10), TRY_CONVERT(date, fecha_muestreo, 103), 23) AS dia,
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_veterinario)), ''), '(sin veterinario)') AS veterinario,
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_lugaranalisis)), ''), '(sin sede)') AS sede,
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresaservicios)), ''), '(sin empresa)') AS empresa,
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_programa)), ''), '(sin programa)') AS programa,
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_centro)), ''), '(sin centro)') AS centro,
+            COUNT(*) AS n,
+            SUM({EXPR_CLP}) AS venta_clp,
+            SUM(CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(nombre_seccion,'')))) = 'COSTO OPERATIVO'
+                     THEN {EXPR_CLP} ELSE 0 END) AS costo_operativo_clp
+        FROM {vista}
+        WHERE TRY_CONVERT(date, fecha_muestreo, 103) IS NOT NULL
+          AND TRY_CONVERT(date, fecha_muestreo, 103) >= '2024-01-01'
+          AND NULLIF(LTRIM(RTRIM(caso_adlab)), '') IS NOT NULL
+        GROUP BY
+            LTRIM(RTRIM(caso_adlab)),
+            CONVERT(char(10), TRY_CONVERT(date, fecha_muestreo, 103), 23),
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_veterinario)), ''), '(sin veterinario)'),
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_lugaranalisis)), ''), '(sin sede)'),
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresaservicios)), ''), '(sin empresa)'),
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_programa)), ''), '(sin programa)'),
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_centro)), ''), '(sin centro)')
+        """,
+    )
+
     print("  · KPIs globales...")
     kpis = consultar(
         cur,
@@ -157,7 +188,7 @@ def analizar(cur, vista: str) -> dict:
         """,
     )[0]
 
-    return {"serie": serie, "calendario": calendario, "kpis": kpis}
+    return {"serie": serie, "calendario": calendario, "casos": casos, "kpis": kpis}
 
 
 def render_html(payload: dict) -> str:
@@ -331,6 +362,37 @@ body {{
 .cal-detail th {{ color:var(--muted); font-size:.72rem; text-transform:uppercase; }}
 .cal-detail td.num, .cal-detail th.num {{ text-align:right; font-variant-numeric:tabular-nums; }}
 .cal-detail .scroll {{ max-height:360px; overflow:auto; }}
+.caso-search {{
+  width:100%; background:#F7FAFC; border:1px solid var(--line); border-radius:14px; padding:12px;
+}}
+.caso-search .lbl {{
+  display:block; font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin-bottom:6px;
+}}
+.caso-search-row {{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }}
+.caso-search-row input {{
+  flex:1; min-width:220px; border:1px solid var(--line); border-radius:12px; padding:10px 12px;
+  font:inherit; font-weight:500; color:var(--ink); background:#fff;
+}}
+.caso-search-row button {{
+  border:0; border-radius:999px; padding:10px 16px; font:inherit; font-weight:700; cursor:pointer;
+  background:var(--navy); color:#fff;
+}}
+.caso-search-row button.ghost {{ background:#fff; color:var(--navy); border:1px solid var(--line); }}
+.caso-hits {{ display:flex; flex-direction:column; gap:6px; max-height:240px; overflow:auto; margin-top:8px; }}
+.caso-hits button.hit {{
+  text-align:left; background:#fff; color:var(--ink); border:1px solid var(--line);
+  border-radius:10px; padding:8px 10px; font:inherit; font-weight:500; cursor:pointer;
+}}
+.caso-hits button.hit:hover {{ border-color:var(--teal); }}
+.caso-hits .msg {{ font-size:.82rem; color:var(--muted); }}
+.caso-ficha {{
+  display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; margin:0 0 12px;
+}}
+@media (max-width:800px) {{ .caso-ficha {{ grid-template-columns:1fr 1fr; }} }}
+.caso-ficha div {{ background:#F7FAFC; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }}
+.caso-ficha .k {{ font-size:.68rem; font-weight:700; text-transform:uppercase; color:var(--muted); }}
+.caso-ficha .v {{ font-weight:700; color:var(--navy); margin-top:2px; word-break:break-word; }}
+.cal-detail tr.caso-hit td {{ background:#FFF6EF; }}
 .rules-box {{
   background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px 18px; margin-bottom:12px;
 }}
@@ -429,6 +491,16 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
       <h3>Día de muestreo</h3>
       <p class="desc">Empresas y programas por veterinario. Costo operativo = sección “Costo Operativo” (UF × UF del día).</p>
       <div class="filters" id="cal-filters" style="margin:10px 0 12px; box-shadow:none">
+        <div class="caso-search">
+          <span class="lbl">Buscar por caso</span>
+          <div class="caso-search-row">
+            <input id="cal-caso" type="search" placeholder="Ej. PM-170523, VI-30109 o solo el número" autocomplete="off">
+            <button type="button" id="btn-buscar-caso">Buscar</button>
+            <button type="button" id="btn-limpiar-caso" class="ghost">Limpiar</button>
+          </div>
+          <p class="hint-multi">Encuentra el día de muestreo del caso y muestra todo lo realizado ese día: veterinarios, sedes, empresas, centros y programas.</p>
+          <div id="cal-caso-hits" class="caso-hits"></div>
+        </div>
         <p class="hint-multi">Puedes marcar varios veterinarios, sedes y programas.</p>
         <label class="f">Veterinario<div class="msel" id="cal-vet" data-empty="Todos"></div></label>
         <label class="f">Cliente / empresa<div class="msel" id="cal-cliente" data-empty="Todos"></div></label>
@@ -455,8 +527,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
       </div>
       <div class="cal-detail" id="cal-day-box">
         <h3 id="cal-detail-title">Resumen del día</h3>
-        <p class="desc">Haz clic en un día del calendario para ver empresas, programas y costo operativo.</p>
-        <div id="cal-detail-body"><em style="color:var(--muted)">Sin día seleccionado</em></div>
+        <div id="cal-detail-body"><em style="color:var(--muted)">Sin día seleccionado. También puedes buscar un caso arriba.</em></div>
       </div>
       <div class="cal-detail" style="margin-top:14px">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
@@ -536,6 +607,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li><strong>Centro</strong> ← <code>nombre_centro</code>.</li>
         <li><strong>Programa</strong> ← <code>nombre_programa</code>.</li>
         <li>Los filtros del calendario (veterinario, cliente/empresa, sede, programa) son multi-selección: vacío = todos.</li>
+        <li><strong>Buscar por caso</strong> usa <code>caso_adlab</code>. Cada caso tiene un día de muestreo. Al encontrarlo se lista <strong>todo lo realizado ese día</strong> (sin recortar por veterinario, cliente, sede ni programa). La fila resaltada es la combinación del caso. Acepta el código completo (<code>PM-170523</code>) o solo el número.</li>
         <li>Al hacer clic en un día se arma el resumen del día sumando N, venta $ y costo operativo $ por veterinario y el detalle por centro.</li>
         <li>La tabla del mes y el Excel exportan el mismo detalle filtrado (día, vet, sede, empresa, centro, programa, montos).</li>
         <li>La tabla <strong>Resumen por empresa y sede</strong> se filtra por año(s), mes(es) y programa(s) a elección: empresa, sede, días distintos de muestreo y costo operativo en UF.</li>
@@ -771,6 +843,7 @@ function renderAnalisis() {{
 /* ---- calendario veterinarios ---- */
 let selectedDia = null;
 let calTableRows = [];
+let casoActivo = null;
 
 function calBaseRows() {{
   const ocultar = document.getElementById('cal-ocultar-na').checked;
@@ -893,14 +966,17 @@ function renderCalendario() {{
   for (let i=0;i<pad;i++) html += `<div class="cal-day empty" aria-hidden="true"></div>`;
   grid.innerHTML = html;
   grid.querySelectorAll('.cal-day.clickable').forEach(el => {{
-    const open = () => showDiaDetalle(el.dataset.dia);
+    const open = () => {{ casoActivo = null; showDiaDetalle(el.dataset.dia); }};
     el.addEventListener('click', open);
     el.addEventListener('keydown', (ev) => {{ if (ev.key === 'Enter' || ev.key === ' ') {{ ev.preventDefault(); open(); }} }});
   }});
 
   renderCalTable();
   renderCalResumen();
-  if (selectedDia && selectedDia.startsWith(`${{anio}}-${{String(mes).padStart(2,'0')}}`))
+  const prefixMes = `${{anio}}-${{String(mes).padStart(2,'0')}}`;
+  if (casoActivo && String(casoActivo[0].dia || '').startsWith(prefixMes))
+    showDiaDetalle(casoActivo[0].dia, false, casoActivo);
+  else if (selectedDia && selectedDia.startsWith(prefixMes))
     showDiaDetalle(selectedDia, false);
 }}
 
@@ -1059,7 +1135,118 @@ function downloadCalResumenExcel() {{
   URL.revokeObjectURL(a.href);
 }}
 
-function showDiaDetalle(dia, doScroll=true) {{
+function escHtml(s) {{
+  return String(s ?? '').replace(/[&<>"']/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[ch]));
+}}
+function normCaso(s) {{
+  return String(s || '').toUpperCase().split(' ').join('');
+}}
+function mismaLineaCaso(r, grupo) {{
+  return (grupo || []).some(c =>
+    r.veterinario === c.veterinario
+    && r.sede === c.sede
+    && r.empresa === c.empresa
+    && (r.centro || '') === (c.centro || '')
+    && r.programa === c.programa
+  );
+}}
+function gruposPorCaso(rows) {{
+  const map = new Map();
+  rows.forEach(r => {{
+    const k = normCaso(r.caso);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(r);
+  }});
+  return [...map.values()].sort((a, b) =>
+    String(b[0].dia).localeCompare(String(a[0].dia))
+    || String(a[0].caso).localeCompare(String(b[0].caso), 'es')
+  );
+}}
+function buscarGruposCaso(q) {{
+  const nq = normCaso(q);
+  if (!nq || nq.length < 3) return {{ error: 'Escribe al menos 3 caracteres del caso.' }};
+  const all = RAW.casos || [];
+  let hits = all.filter(r => normCaso(r.caso) === nq);
+  if (!hits.length && /^[0-9]+$/.test(nq)) {{
+    hits = all.filter(r => normCaso(r.caso).split('-').pop() === nq);
+  }}
+  if (!hits.length) hits = all.filter(r => normCaso(r.caso).includes(nq));
+  return {{ grupos: gruposPorCaso(hits) }};
+}}
+function abrirCaso(grupo) {{
+  casoActivo = grupo;
+  selectedDia = grupo[0].dia;
+  const partes = String(grupo[0].dia || '').split('-');
+  const selA = document.getElementById('cal-anio');
+  const selM = document.getElementById('cal-mes');
+  if ([...selA.options].some(o => o.value === partes[0])) selA.value = partes[0];
+  selM.value = String(Number(partes[1] || 1));
+  document.getElementById('cal-caso-hits').innerHTML = '';
+  renderCalendario();
+  document.getElementById('cal-day-box').scrollIntoView({{ behavior:'smooth', block:'nearest' }});
+}}
+function renderHitsCaso(grupos) {{
+  const box = document.getElementById('cal-caso-hits');
+  const show = grupos.slice(0, 30);
+  const extra = grupos.length > show.length
+    ? ` Mostrando los ${{show.length}} más recientes: afina el número.`
+    : '';
+  box.innerHTML = `<div class="msg">${{fmtN(grupos.length)}} casos coinciden.${{extra}} Elige uno.</div>`
+    + show.map(g => {{
+      const c = g[0];
+      const centros = [...new Set(g.map(x => x.centro))].join(', ');
+      return `<button type="button" class="hit"><strong>${{escHtml(c.caso)}}</strong> · ${{escHtml(c.dia)}} · ${{escHtml(c.empresa)}} · ${{escHtml(centros)}} · ${{escHtml(c.veterinario)}}</button>`;
+    }}).join('');
+  box.querySelectorAll('button.hit').forEach((btn, i) => {{
+    btn.addEventListener('click', () => abrirCaso(show[i]));
+  }});
+}}
+function buscarCaso() {{
+  const q = document.getElementById('cal-caso').value;
+  const res = buscarGruposCaso(q);
+  const box = document.getElementById('cal-caso-hits');
+  if (res.error) {{ box.innerHTML = `<div class="msg">${{res.error}}</div>`; return; }}
+  if (!res.grupos.length) {{
+    box.innerHTML = `<div class="msg">No hay un caso “${{escHtml(normCaso(q))}}” con muestreo desde 2024.</div>`;
+    return;
+  }}
+  if (res.grupos.length === 1) {{ abrirCaso(res.grupos[0]); return; }}
+  renderHitsCaso(res.grupos);
+}}
+function limpiarCaso() {{
+  casoActivo = null;
+  document.getElementById('cal-caso').value = '';
+  document.getElementById('cal-caso-hits').innerHTML = '';
+  if (selectedDia) showDiaDetalle(selectedDia, false);
+  else {{
+    document.getElementById('cal-detail-title').textContent = 'Resumen del día';
+    document.getElementById('cal-detail-body').innerHTML = '<em style="color:var(--muted)">Sin día seleccionado</em>';
+    document.getElementById('cal-day-box').classList.remove('highlight');
+  }}
+}}
+function fichaCaso(grupo) {{
+  const c = grupo[0];
+  const nCaso = grupo.reduce((a, r) => a + (Number(r.n) || 0), 0);
+  const costoCaso = grupo.reduce((a, r) => a + (Number(r.costo_operativo_clp) || 0), 0);
+  const centros = [...new Set(grupo.map(r => r.centro))].join(', ');
+  const progs = [...new Set(grupo.map(r => r.programa))].join(', ');
+  const vets = [...new Set(grupo.map(r => r.veterinario))].join(', ');
+  const sedes = [...new Set(grupo.map(r => r.sede))].join(', ');
+  const empresas = [...new Set(grupo.map(r => r.empresa))].join(', ');
+  return `<div class="caso-ficha">
+      <div><div class="k">Caso</div><div class="v">${{escHtml(c.caso)}}</div></div>
+      <div><div class="k">Día de muestreo</div><div class="v">${{escHtml(c.dia)}}</div></div>
+      <div><div class="k">Veterinario</div><div class="v">${{escHtml(vets)}}</div></div>
+      <div><div class="k">Sede</div><div class="v">${{escHtml(sedes)}}</div></div>
+      <div><div class="k">Empresa</div><div class="v">${{escHtml(empresas)}}</div></div>
+      <div><div class="k">Centro</div><div class="v">${{escHtml(centros)}}</div></div>
+      <div><div class="k">Programa</div><div class="v">${{escHtml(progs)}}</div></div>
+      <div><div class="k">Líneas del caso</div><div class="v">${{fmtN(nCaso)}} · op. ${{fmtM(costoCaso)}}</div></div>
+    </div>
+    <p class="desc">Todo lo realizado el ${{escHtml(c.dia)}}, sin recortar por veterinario, cliente, sede ni programa. La fila resaltada incluye este caso.</p>`;
+}}
+
+function showDiaDetalle(dia, doScroll=true, grupo=null) {{
   selectedDia = dia;
   document.querySelectorAll('.cal-day.selected').forEach(el => el.classList.remove('selected'));
   const cell = document.querySelector(`.cal-day[data-dia="${{dia}}"]`);
@@ -1067,11 +1254,18 @@ function showDiaDetalle(dia, doScroll=true) {{
 
   const box = document.getElementById('cal-day-box');
   box.classList.add('highlight');
-  const rows = calTableRows.filter(r => r.dia === dia)
+  const fuente = grupo ? (RAW.calendario || []) : calTableRows;
+  const rows = fuente.filter(r => r.dia === dia)
     .sort((a,b) => (b.costo_operativo_clp||0)-(a.costo_operativo_clp||0));
-  document.getElementById('cal-detail-title').textContent = `Resumen del día · ${{dia}}`;
+  document.getElementById('cal-detail-title').textContent = grupo
+    ? `Caso ${{grupo[0].caso}} · día de muestreo ${{dia}}`
+    : `Resumen del día · ${{dia}}`;
   if (!rows.length) {{
-    document.getElementById('cal-detail-body').innerHTML = '<em style="color:var(--muted)">Sin muestreo ese día con el filtro actual</em>';
+    const msg = grupo
+      ? 'Ese caso no tiene actividad de muestreo cargada en el calendario.'
+      : 'Sin muestreo ese día con el filtro actual';
+    document.getElementById('cal-detail-body').innerHTML = (grupo ? fichaCaso(grupo) : '')
+      + `<em style="color:var(--muted)">${{msg}}</em>`;
     if (doScroll) box.scrollIntoView({{ behavior:'smooth', block:'nearest' }});
     return;
   }}
@@ -1090,7 +1284,8 @@ function showDiaDetalle(dia, doScroll=true) {{
   }});
   const vets = [...byVet.values()].sort((a,b)=>b.costo-a.costo);
   document.getElementById('cal-detail-body').innerHTML = `
-    <p class="desc">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}} registros · venta ${{fmtM(sum(rows))}} · <strong>costo operativo ${{fmtM(sum(rows,'costo_operativo_clp'))}}</strong></p>
+    ${{grupo ? fichaCaso(grupo) : ''}}
+    <p class="desc">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}} registros del día · venta ${{fmtM(sum(rows))}} · <strong>costo operativo ${{fmtM(sum(rows,'costo_operativo_clp'))}}</strong></p>
     <div class="scroll">
     <table>
       <thead><tr><th>Veterinario</th><th>Sede</th><th>Empresas</th><th>Centros</th><th>Programas</th><th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th></tr></thead>
@@ -1117,7 +1312,7 @@ function showDiaDetalle(dia, doScroll=true) {{
     <table>
       <thead><tr><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programa</th><th class="num">N</th><th class="num">Costo op. $</th></tr></thead>
       <tbody>
-        ${{rows.map(r => `<tr>
+        ${{rows.map(r => `<tr${{grupo && mismaLineaCaso(r, grupo) ? ' class="caso-hit"' : ''}}>
           <td>${{r.veterinario}}</td><td>${{r.sede}}</td><td>${{r.empresa}}</td>
           <td>${{r.centro||''}}</td><td>${{r.programa}}</td>
           <td class="num">${{fmtN(r.n)}}</td><td class="num">${{fmt(r.costo_operativo_clp)}}</td>
@@ -1162,6 +1357,11 @@ function refreshCal() {{
   renderCalendario();
 }}
 
+document.getElementById('btn-buscar-caso').addEventListener('click', buscarCaso);
+document.getElementById('btn-limpiar-caso').addEventListener('click', limpiarCaso);
+document.getElementById('cal-caso').addEventListener('keydown', ev => {{
+  if (ev.key === 'Enter') {{ ev.preventDefault(); buscarCaso(); }}
+}});
 document.getElementById('btn-excel-cal').addEventListener('click', downloadCalExcel);
 document.getElementById('btn-excel-cal-resumen').addEventListener('click', downloadCalResumenExcel);
 ['cal-resumen-anio','cal-resumen-mes','cal-resumen-programa'].forEach(id => {{
@@ -1210,7 +1410,7 @@ def main() -> None:
     }
     OUT_HTML.write_text(render_html(payload), encoding="utf-8")
     print(f"OK -> {OUT_HTML}")
-    print(f"  Serie: {len(datos['serie']):,} grupos · Calendario: {len(datos['calendario']):,} filas")
+    print(f"  Serie: {len(datos['serie']):,} grupos · Calendario: {len(datos['calendario']):,} filas · Casos: {len(datos['casos']):,}")
     k = datos["kpis"]
     print(f"  Venta CLP facturada: ${k.get('venta_clp_facturada') or 0:,.0f}")
 

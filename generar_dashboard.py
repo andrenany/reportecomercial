@@ -1,7 +1,7 @@
 """
 Genera dashboard HTML interactivo + página de reglas.
 
-- Ventas unificadas (OC fecha vs Facturación consolidada sin OC)
+- Ventas unificadas (OC si el cliente está en el registro; Juan si está en la lista sin OC o no aparece en OC)
 - Clasificación por tipo de ingreso según PROGRAMAS.xlsx (SDG / PVE / SCR / Cap.)
 - Excluye Medio Ambiente e I+D (documentado en reglas)
 - Gráficos estilo Facturación (mes x tipo, top empresas, ciclo)
@@ -118,6 +118,120 @@ def _es_sin_oc(cliente_norm, empresa_abr, cliente_key, sin_oc_keys: set[str]) ->
     return any(f in texto for f in fuertes)
 
 
+_STOP_EMPRESA = {
+    "CHILE", "SALMON", "SALMONES", "LIMITADA", "LTDA", "SA", "SPA",
+    "DEL", "DE", "LA", "LAS", "LOS", "THE", "AND", "EN", "Y", "EL",
+    "PRODUCTOS", "MAR", "COMERCIALIZADORA", "COMERCIAL", "SERVICIOS",
+    "LABORATORIO", "CENTRO", "EMPRESAS", "EXPORTADORA", "ACUICOLA",
+    "INVESTIGACION", "INNOVACION", "COMPANIA", "CIA",
+}
+
+
+def _clave_empresa(valor) -> str | None:
+    """Nombre comparable: sin razón social, puntos ni espacios (ECO SALMON = ECOSALMON)."""
+    t = normalizar_texto(valor)
+    if not t:
+        return None
+    t = re.sub(r"\b(SA|SPA|LTDA|LIMITADA|CIA|COMPANIA)\b", "", t)
+    t = re.sub(r"[^A-Z0-9]", "", t)
+    return t or None
+
+
+def _tokens_cliente(*valores) -> set[str]:
+    """Solo nombre completo y clave compacta. No parte en palabras (evita MARINA, GENETICS, etc.)."""
+    out: set[str] = set()
+    for v in valores:
+        n = normalizar_texto(v)
+        if n:
+            out.add(n)
+        k = _clave_empresa(v)
+        if k:
+            out.add(k)
+    return out
+
+
+def _abr_en_nombre(abr: str, nombre: str) -> bool:
+    if not abr or not nombre:
+        return False
+    if abr == nombre:
+        return True
+    padded = f" {nombre} "
+    return f" {abr} " in padded
+
+
+def _aliases_mapa(mapa_emp: pd.DataFrame | None) -> list[tuple[str | None, set[str]]]:
+    if mapa_emp is None or mapa_emp.empty:
+        return []
+    abr_col = "Empresa_Abr_norm" if "Empresa_Abr_norm" in mapa_emp.columns else "Empresa_Abr"
+    emp_col = "Empresa_norm" if "Empresa_norm" in mapa_emp.columns else "Empresa"
+    out: list[tuple[str | None, set[str]]] = []
+    for _, row in mapa_emp.iterrows():
+        abr = normalizar_texto(row.get(abr_col))
+        extra = _tokens_cliente(row.get(abr_col), row.get(emp_col), row.get("Empresa_Abr"), row.get("Empresa"))
+        if abr or extra:
+            out.append((abr, extra))
+    return out
+
+
+def _tokens_con_aliases(*nombres, aliases: list[tuple[str | None, set[str]]] | None = None) -> set[str]:
+    toks = _tokens_cliente(*nombres)
+    if not aliases:
+        return toks
+    nombres_norm = []
+    for v in nombres:
+        n = normalizar_texto(v)
+        if n:
+            nombres_norm.append(n)
+    for abr, extra in aliases:
+        if abr and any(_abr_en_nombre(abr, n) for n in nombres_norm):
+            toks |= extra
+    return toks
+
+
+def _cobertura_oc_periodos(
+    oc_venta: pd.DataFrame, mapa_emp: pd.DataFrame | None = None
+) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """token → periodos OC, y periodo → claves compactas (para no duplicar el mismo mes)."""
+    aliases = _aliases_mapa(mapa_emp)
+    token_periodos: dict[str, set[str]] = {}
+    claves_periodo: dict[str, set[str]] = {}
+    for _, row in oc_venta.iterrows():
+        per = row.get("periodo") or "SIN PERIODO"
+        toks = _tokens_con_aliases(
+            row.get("Cliente_norm"), row.get("Empresa_Abr"), row.get("Cliente_key"),
+            aliases=aliases,
+        )
+        for t in toks:
+            token_periodos.setdefault(t, set()).add(per)
+            if t and " " not in t and len(t) >= 7 and t not in _STOP_EMPRESA:
+                claves_periodo.setdefault(per, set()).add(t)
+    return token_periodos, claves_periodo
+
+
+def _cubierto_en_oc_periodo(
+    cliente_norm, empresa_abr, cliente_key, empresa_norm, periodo,
+    token_periodos: dict[str, set[str]],
+    claves_periodo: dict[str, set[str]],
+    aliases: list[tuple[str | None, set[str]]] | None,
+) -> bool:
+    """True si ese cliente ya tiene venta OC en el mismo año-mes."""
+    toks = _tokens_con_aliases(
+        cliente_norm, empresa_abr, cliente_key, empresa_norm, aliases=aliases
+    )
+    for t in toks:
+        if periodo in token_periodos.get(t, ()):
+            return True
+    oc_claves = claves_periodo.get(periodo) or set()
+    if not oc_claves:
+        return False
+    for k in toks:
+        if not k or " " in k or len(k) < 7 or k in _STOP_EMPRESA:
+            continue
+        if any(k in oc_k or oc_k in k for oc_k in oc_claves):
+            return True
+    return False
+
+
 def _periodo_label(anio, mes_num) -> str:
     if pd.isna(anio) or pd.isna(mes_num):
         return "SIN PERIODO"
@@ -183,7 +297,12 @@ def clasificar_tipo(texto, mapa: pd.DataFrame, fallback_tipo: str | None = None)
     return "OTROS", TIPO_LABEL["OTROS"], None
 
 
-def construir_ventas_unificadas(oc: pd.DataFrame, fac: pd.DataFrame, mapa_prog: pd.DataFrame) -> pd.DataFrame:
+def construir_ventas_unificadas(
+    oc: pd.DataFrame,
+    fac: pd.DataFrame,
+    mapa_prog: pd.DataFrame,
+    mapa_emp: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     sin_oc_keys = _keys_sin_oc()
 
     oc2 = oc.copy()
@@ -242,12 +361,14 @@ def construir_ventas_unificadas(oc: pd.DataFrame, fac: pd.DataFrame, mapa_prog: 
         ]
     ].rename(columns={"Fecha_limpia": "fecha_venta"})
 
+    token_periodos, claves_periodo = _cobertura_oc_periodos(oc_venta, mapa_emp)
+    aliases_emp = _aliases_mapa(mapa_emp)
+
     fac2 = fac.copy()
     fac2["es_sin_oc"] = [
         _es_sin_oc(a, b, c, sin_oc_keys)
         for a, b, c in zip(fac2["Cliente_norm"], fac2["Empresa_Abr"], fac2["Cliente_key"])
     ]
-    fac_venta = fac2[fac2["es_sin_oc"]].copy()
 
     def mes_desde_fila(row) -> float:
         p = row.get("PERIODO_norm")
@@ -258,12 +379,26 @@ def construir_ventas_unificadas(oc: pd.DataFrame, fac: pd.DataFrame, mapa_prog: 
             return MES_EN[m]
         return float("nan")
 
-    fac_venta["anio_venta"] = fac_venta["Anio"]
-    fac_venta["mes_venta"] = fac_venta.apply(mes_desde_fila, axis=1)
-    fac_venta["periodo"] = [
-        _periodo_label(a, m) for a, m in zip(fac_venta["anio_venta"], fac_venta["mes_venta"])
+    fac2["anio_venta"] = fac2["Anio"]
+    fac2["mes_venta"] = fac2.apply(mes_desde_fila, axis=1)
+    fac2["periodo"] = [
+        _periodo_label(a, m) for a, m in zip(fac2["anio_venta"], fac2["mes_venta"])
     ]
-    fac_venta["fuente"] = "Facturación consolidada (sin OC)"
+    emp_norm = fac2["Empresa_norm"] if "Empresa_norm" in fac2.columns else pd.Series([None] * len(fac2))
+    fac2["ya_en_oc"] = [
+        _cubierto_en_oc_periodo(a, b, c, d, per, token_periodos, claves_periodo, aliases_emp)
+        for a, b, c, d, per in zip(
+            fac2["Cliente_norm"],
+            fac2["Empresa_Abr"],
+            fac2["Cliente_key"],
+            emp_norm,
+            fac2["periodo"],
+        )
+    ]
+    # Lista fija sin OC → Juan. El resto de Juan entra solo en meses donde ese cliente no está en OC.
+    fac_venta = fac2[fac2["es_sin_oc"] | ~fac2["ya_en_oc"]].copy()
+    fac_venta["fuente"] = "Facturación consolidada (no está en OC)"
+    fac_venta.loc[fac_venta["es_sin_oc"], "fuente"] = "Facturación consolidada (sin OC)"
     fac_venta["monto"] = fac_venta["MONTO"]
     fac_venta["cliente_corto"] = fac_venta["Cliente_key"].fillna(fac_venta["Empresa_norm"])
 
@@ -893,6 +1028,11 @@ const fmtM = (n) => {{
   if (Math.abs(v) >= 1e6) return '$' + (v/1e6).toFixed(1) + ' M';
   return fmt(v);
 }};
+const FUENTE_LABEL = {{
+  'Registro comercial (OC)': 'Registro comercial (OC)',
+  'Facturación consolidada (sin OC)': 'Juan · lista sin OC',
+  'Facturación consolidada (no está en OC)': 'Juan · no está en OC',
+}};
 const ESTADO_LABEL = {{
   pendiente_facturar: 'Falta OC/HES',
   listo_para_facturar: 'Listo para facturar',
@@ -939,7 +1079,7 @@ function fillFilters() {{
   const estados = uniqueSorted(rows.map(r => r.estado_venta));
   const estLab = Object.fromEntries(estados.map(v => [String(v), ESTADO_LABEL[v] || v]));
   fillMulti('f-estado', estados, [], estLab);
-  fillMulti('f-fuente', uniqueSorted(rows.map(r => r.fuente)));
+  fillMulti('f-fuente', uniqueSorted(rows.map(r => r.fuente)), [], FUENTE_LABEL);
 }}
 function applyFilters(rows, opts) {{
   const skipPeriodo = opts && opts.skipPeriodo;
@@ -1008,7 +1148,7 @@ function renderKpis(rows) {{
   const topTipo = porTipo[0];
 
   const items = [
-    ['Ventas filtradas', fmtM(total), docs + ' documentos', 'accent'],
+    ['Ventas filtradas', fmt(total), fmtM(total) + ' · ' + docs + ' documentos', 'accent'],
     ['Promedio por documento', docs ? fmtM(total/docs) : '—', 'monto total ÷ N° docs', 'navy'],
     ['Falta OC / HES', fmtM(pend.reduce((a,r)=>a+r.monto,0)), pend.length + ' docs · aún sin documentación', 'warn'],
     ['Listo para facturar', fmtM(listo.reduce((a,r)=>a+r.monto,0)), listo.length + ' docs · ya tiene OC y HES', 'info'],
@@ -1472,8 +1612,10 @@ def render_reglas(generado: str) -> str:
     <div class="panel">
       <h2>Fecha de venta (sin duplicar)</h2>
       <ul style="color:var(--muted);line-height:1.5">
-        <li>Con OC: fecha = Fecha del registro comercial</li>
-        <li>Sin OC: mes/año = Facturación consolidada</li>
+        <li>El corte es <strong>cliente × mes</strong>: si Eco Salmon está en OC hasta junio, esos meses mandan OC. Si desde julio solo está en Juan, julio entra por Juan.</li>
+        <li>Lista fija sin OC (Aquagen, SASA, etc.): siempre Juan, aunque aparezcan en el Excel OC.</li>
+        <li>Cliente/mes en Juan que no está en Pendiente de OC: entra desde Juan, para no perderlo.</li>
+        <li>Sin OC / solo Juan: mes/año = Facturación consolidada</li>
         <li>Anuladas (rojo/naranja) no suman</li>
       </ul>
     </div>
@@ -1503,7 +1645,8 @@ def render_reglas(generado: str) -> str:
     </div>
     <div class="panel">
       <h2>Empresas sin OC</h2>
-      <ul style="color:var(--muted);line-height:1.5">{empresas}</ul>
+      <ul style="color:var(--muted);line-height:1.5">{empresas}
+      <li style="margin-top:8px">Esa lista <strong>siempre</strong> sale de Juan. El resto: si el cliente está en OC ese mes, manda OC; si ese mes ya no está en el registro, se completa con Juan (p. ej. Eco Salmon hasta junio en OC y después solo en Juan).</li></ul>
     </div>
   </div>
   <div class="panel" style="margin-top:12px; border-top: 3px solid #D64545;">
@@ -1521,7 +1664,7 @@ def render_reglas(generado: str) -> str:
     <ul style="color:var(--muted);line-height:1.5">
       <li>Réplica de la página Power BI <strong>Resumen Cantidad</strong>, sin modificar el .pbix.</li>
       <li>Fuente: <code>dbo.vw_FVivaldiWebSalud</code>. Cantidad = suma de <code>fac_n_analisis</code> por <code>fecha_recepcion</code>.</li>
-      <li>Filtros: empresa (<code>nombre_empresaservicios</code>), sede (<code>nombre_lugaranalisis</code>), unidad (<code>nombre_seccion</code>), calendario (año/mes) y programa.</li>
+      <li>Filtros: empresa (<code>nombre_empresaservicios</code>), sede (<code>nombre_lugaranalisis</code>), unidad (<code>nombre_seccion</code>), calendario (año/mes), programa y técnica acortada (nombre_tecnica sin prefijo RT-PCR/PCR).</li>
       <li>Periodo anterior = mismos meses del año previo. El gráfico por año no usa el filtro de calendario.</li>
       <li>Se excluyen empresas internas ADL Diagnostic y técnicas ELF (mismo criterio de la página BI).</li>
       <li>Cada gráfico se puede ver como tabla y descargar a Excel.</li>
@@ -1541,7 +1684,7 @@ def render_reglas(generado: str) -> str:
   <div class="panel" style="margin-top:12px">
     <h2>Indicadores</h2>
     <ul style="color:var(--muted);line-height:1.5">
-      <li><strong>Unificado</strong>: combina registro comercial + facturación sin OC.</li>
+      <li><strong>Unificado</strong>: por cliente y mes. Si ese mes está en OC, manda el registro comercial. Si no, se completa con Juan. La lista fija sin OC siempre sale de Juan.</li>
       <li><strong>Solo facturación</strong>: solo el consolidado Juan (sin facturado 2026.xlsx ni provisionados).</li>
       <li>En ambos, cada gráfico tiene botones <em>Gráfico / Tabla / Copiar</em>.</li>
       <li><strong>Promedio por documento</strong> = monto total filtrado ÷ cantidad de documentos.</li>
@@ -1580,7 +1723,7 @@ def main() -> None:
         df.loc[m, "Cliente_key"] = df.loc[m, "Empresa_Abr"]
 
     print("Unificando ventas + tipos de ingreso...")
-    ventas = construir_ventas_unificadas(oc, fac, mapa_prog)
+    ventas = construir_ventas_unificadas(oc, fac, mapa_prog, mapa)
 
     print("Fotos pendiente en blanco (día 28)...")
     fotos_pendiente = actualizar_fotos_pendiente(oc, ventas)

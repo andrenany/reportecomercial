@@ -395,7 +395,7 @@ table.pivot td.empty { color: #B0BEC5; }
       </div>
     </div>
     
-  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-10-27 09:48</p>
+  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-10-27 17:05</p>
   <div class="rule-grid">
     <div class="panel">
       <h2>Fuentes (solo lectura)</h2>
@@ -408,8 +408,10 @@ table.pivot td.empty { color: #B0BEC5; }
     <div class="panel">
       <h2>Fecha de venta (sin duplicar)</h2>
       <ul style="color:var(--muted);line-height:1.5">
-        <li>Con OC: fecha = Fecha del registro comercial</li>
-        <li>Sin OC: mes/año = Facturación consolidada</li>
+        <li>El corte es <strong>cliente × mes</strong>: si Eco Salmon está en OC hasta junio, esos meses mandan OC. Si desde julio solo está en Juan, julio entra por Juan.</li>
+        <li>Lista fija sin OC (Aquagen, SASA, etc.): siempre Juan, aunque aparezcan en el Excel OC.</li>
+        <li>Cliente/mes en Juan que no está en Pendiente de OC: entra desde Juan, para no perderlo.</li>
+        <li>Sin OC / solo Juan: mes/año = Facturación consolidada</li>
         <li>Anuladas (rojo/naranja) no suman</li>
       </ul>
     </div>
@@ -439,7 +441,8 @@ table.pivot td.empty { color: #B0BEC5; }
     </div>
     <div class="panel">
       <h2>Empresas sin OC</h2>
-      <ul style="color:var(--muted);line-height:1.5"><li><strong>AQUAGEN</strong> <span style='color:#627D98'>(AQUAGEN CHILE S.A.)</span></li><li><strong>SALMONIFERA DALCAHUE</strong> <span style='color:#627D98'>(CIA. SALMONIFERA DALCAHUE)</span></li><li><strong>SASA</strong> <span style='color:#627D98'>(SALMONES ANTARTICA  S.A.)</span></li><li><strong>NALCAHUE</strong> <span style='color:#627D98'>(ACUICOLA E INVERS NALCAHUE LTD)</span></li><li><strong>THE CHALLENGE ROOM</strong> <span style='color:#627D98'>(THE CHALLENGE ROOM SPA)</span></li><li><strong>BAJA TROUT</strong> <span style='color:#627D98'>(BAJA TROUT SA)</span></li><li><strong>CODEBREAKER</strong> <span style='color:#627D98'>(CODEBREAKER BIOSCIENCE SPA)</span></li></ul>
+      <ul style="color:var(--muted);line-height:1.5"><li><strong>AQUAGEN</strong> <span style='color:#627D98'>(AQUAGEN CHILE S.A.)</span></li><li><strong>SALMONIFERA DALCAHUE</strong> <span style='color:#627D98'>(CIA. SALMONIFERA DALCAHUE)</span></li><li><strong>SASA</strong> <span style='color:#627D98'>(SALMONES ANTARTICA  S.A.)</span></li><li><strong>NALCAHUE</strong> <span style='color:#627D98'>(ACUICOLA E INVERS NALCAHUE LTD)</span></li><li><strong>THE CHALLENGE ROOM</strong> <span style='color:#627D98'>(THE CHALLENGE ROOM SPA)</span></li><li><strong>BAJA TROUT</strong> <span style='color:#627D98'>(BAJA TROUT SA)</span></li><li><strong>CODEBREAKER</strong> <span style='color:#627D98'>(CODEBREAKER BIOSCIENCE SPA)</span></li>
+      <li style="margin-top:8px">Esa lista <strong>siempre</strong> sale de Juan. El resto: si el cliente está en OC ese mes, manda OC; si ese mes ya no está en el registro, se completa con Juan (p. ej. Eco Salmon hasta junio en OC y después solo en Juan).</li></ul>
     </div>
   </div>
   <div class="panel" style="margin-top:12px; border-top: 3px solid #D64545;">
@@ -457,7 +460,7 @@ table.pivot td.empty { color: #B0BEC5; }
     <ul style="color:var(--muted);line-height:1.5">
       <li>Réplica de la página Power BI <strong>Resumen Cantidad</strong>, sin modificar el .pbix.</li>
       <li>Fuente: <code>dbo.vw_FVivaldiWebSalud</code>. Cantidad = suma de <code>fac_n_analisis</code> por <code>fecha_recepcion</code>.</li>
-      <li>Filtros: empresa (<code>nombre_empresaservicios</code>), sede (<code>nombre_lugaranalisis</code>), unidad (<code>nombre_seccion</code>), calendario (año/mes) y programa.</li>
+      <li>Filtros: empresa (<code>nombre_empresaservicios</code>), sede (<code>nombre_lugaranalisis</code>), unidad (<code>nombre_seccion</code>), calendario (año/mes), programa y técnica acortada (nombre_tecnica sin prefijo RT-PCR/PCR).</li>
       <li>Periodo anterior = mismos meses del año previo. El gráfico por año no usa el filtro de calendario.</li>
       <li>Se excluyen empresas internas ADL Diagnostic y técnicas ELF (mismo criterio de la página BI).</li>
       <li>Cada gráfico se puede ver como tabla y descargar a Excel.</li>
@@ -477,7 +480,7 @@ table.pivot td.empty { color: #B0BEC5; }
   <div class="panel" style="margin-top:12px">
     <h2>Indicadores</h2>
     <ul style="color:var(--muted);line-height:1.5">
-      <li><strong>Unificado</strong>: combina registro comercial + facturación sin OC.</li>
+      <li><strong>Unificado</strong>: por cliente y mes. Si ese mes está en OC, manda el registro comercial. Si no, se completa con Juan. La lista fija sin OC siempre sale de Juan.</li>
       <li><strong>Solo facturación</strong>: solo el consolidado Juan (sin facturado 2026.xlsx ni provisionados).</li>
       <li>En ambos, cada gráfico tiene botones <em>Gráfico / Tabla / Copiar</em>.</li>
       <li><strong>Promedio por documento</strong> = monto total filtrado ÷ cantidad de documentos.</li>
