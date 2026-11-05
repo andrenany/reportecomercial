@@ -168,6 +168,38 @@ def analizar(cur, vista: str) -> dict:
         """,
     )
 
+    print("  · casos → pre-factura y factura...")
+    facturas = consultar(
+        cur,
+        f"""
+        SELECT
+            caso,
+            prefactura,
+            factura,
+            estado,
+            fecha,
+            empresa
+        FROM (
+            SELECT
+                LTRIM(RTRIM(caso_adlab)) AS caso,
+                NULLIF(CASE
+                    WHEN LTRIM(RTRIM(CAST(fac_id_facturacion AS varchar(40)))) IN ('0', '9999999998') THEN ''
+                    ELSE LTRIM(RTRIM(CAST(fac_id_facturacion AS varchar(40))))
+                END, '') AS prefactura,
+                NULLIF(LTRIM(RTRIM(CAST(factura AS varchar(40)))), '') AS factura,
+                ISNULL(NULLIF(LTRIM(RTRIM(estado)), ''), '(sin estado)') AS estado,
+                CONVERT(char(10), COALESCE(
+                    TRY_CONVERT(date, fac_fecha_facturacion),
+                    TRY_CONVERT(date, fac_fecha_facturacion, 103)
+                ), 23) AS fecha,
+                ISNULL(NULLIF(LTRIM(RTRIM(nombre_empresaservicios)), ''), '') AS empresa
+            FROM {vista}
+            WHERE NULLIF(LTRIM(RTRIM(caso_adlab)), '') IS NOT NULL
+        ) t
+        GROUP BY caso, prefactura, factura, estado, fecha, empresa
+        """,
+    )
+
     print("  · KPIs globales...")
     kpis = consultar(
         cur,
@@ -188,7 +220,7 @@ def analizar(cur, vista: str) -> dict:
         """,
     )[0]
 
-    return {"serie": serie, "calendario": calendario, "casos": casos, "kpis": kpis}
+    return {"serie": serie, "calendario": calendario, "casos": casos, "facturas": facturas, "kpis": kpis}
 
 
 def render_html(payload: dict) -> str:
@@ -392,6 +424,20 @@ body {{
 .caso-ficha div {{ background:#F7FAFC; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }}
 .caso-ficha .k {{ font-size:.68rem; font-weight:700; text-transform:uppercase; color:var(--muted); }}
 .caso-ficha .v {{ font-weight:700; color:var(--navy); margin-top:2px; word-break:break-word; }}
+.fac-buscar {{ margin-bottom:10px; padding:10px 12px; }}
+.fac-buscar h3 {{ font-size:.92rem; margin-bottom:2px; }}
+.fac-buscar .desc {{ font-size:.75rem; margin:0 0 8px; }}
+.fac-buscar .caso-search {{ padding:8px 10px; border-radius:10px; }}
+.fac-buscar .caso-search .lbl {{ margin-bottom:4px; }}
+.fac-buscar .caso-search-row {{ gap:6px; }}
+.fac-buscar .caso-search-row input {{ padding:6px 10px; border-radius:8px; font-size:.82rem; min-width:160px; }}
+.fac-buscar .caso-search-row button {{ padding:6px 12px; font-size:.78rem; }}
+.fac-buscar .caso-hits {{ max-height:150px; margin-top:6px; gap:4px; }}
+.fac-buscar .caso-hits button.hit {{ padding:5px 8px; font-size:.78rem; border-radius:8px; }}
+.fac-caso-result {{ margin-top:6px; }}
+.fac-caso-result table {{ width:100%; border-collapse:collapse; font-size:.78rem; }}
+.fac-caso-result th, .fac-caso-result td {{ padding:4px 6px; border-bottom:1px solid var(--line); text-align:left; }}
+.fac-caso-result th {{ color:var(--muted); font-size:.68rem; text-transform:uppercase; }}
 .cal-detail tr.caso-hit td {{ background:#FFF6EF; }}
 .rules-box {{
   background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px 18px; margin-bottom:12px;
@@ -440,6 +486,20 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
   </div>
 
   <div id="tab-analisis" class="tab-pane active">
+    <div class="panel fac-buscar">
+      <h3>Buscar caso</h3>
+      <p class="desc">Pre-factura y factura del caso. Si no hay número, se muestra “—”.</p>
+      <div class="caso-search">
+        <span class="lbl">Caso</span>
+        <div class="caso-search-row">
+          <input id="fac-caso" type="search" placeholder="Ej. PM-157553, VI-27432 o solo el número" autocomplete="off">
+          <button type="button" id="btn-buscar-fac-caso">Buscar</button>
+          <button type="button" id="btn-limpiar-fac-caso" class="ghost">Limpiar</button>
+        </div>
+        <div id="fac-caso-hits" class="caso-hits"></div>
+        <div id="fac-caso-result" class="fac-caso-result"></div>
+      </div>
+    </div>
     <div class="filters" id="filters">
       <p class="hint-multi">Filtros multi-selección. Vacío = todos. Serie desde 2020.</p>
       <label class="f">Año<div class="msel" id="f-anio" data-empty="Todos"></div></label>
@@ -1357,6 +1417,100 @@ function refreshCal() {{
   renderCalendario();
 }}
 
+function filasFacturaCaso(q) {{
+  const nq = normCaso(q);
+  if (!nq || nq.length < 3) return {{ error: 'Escribe al menos 3 caracteres del caso.' }};
+  const all = RAW.facturas || [];
+  let hits = all.filter(r => normCaso(r.caso) === nq);
+  if (!hits.length && /^[0-9]+$/.test(nq)) {{
+    hits = all.filter(r => normCaso(r.caso).split('-').pop() === nq);
+  }}
+  if (!hits.length) hits = all.filter(r => normCaso(r.caso).includes(nq));
+  const map = new Map();
+  hits.forEach(r => {{
+    const k = normCaso(r.caso);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(r);
+  }});
+  const grupos = [...map.values()].sort((a, b) =>
+    String(a[0].caso).localeCompare(String(b[0].caso), 'es')
+  );
+  return {{ grupos }};
+}}
+function ordenDocs(rows) {{
+  return rows.slice().sort((a, b) =>
+    String(b.fecha || '').localeCompare(String(a.fecha || ''))
+    || String(b.factura || '').localeCompare(String(a.factura || ''), 'es', {{ numeric: true }})
+    || String(b.prefactura || '').localeCompare(String(a.prefactura || ''), 'es', {{ numeric: true }})
+  );
+}}
+function docNum(v) {{
+  const s = String(v ?? '').trim();
+  return s ? escHtml(s) : '—';
+}}
+function pintarFacturaCaso(rows) {{
+  const box = document.getElementById('fac-caso-result');
+  const c = rows[0];
+  const empresas = [...new Set(rows.map(r => r.empresa).filter(Boolean))];
+  const docs = ordenDocs(rows);
+  box.innerHTML = `
+    <p class="desc"><strong>${{escHtml(c.caso)}}</strong>${{empresas.length ? ' · ' + escHtml(empresas.join(', ')) : ''}}</p>
+    <table>
+      <thead><tr><th>Pre-factura</th><th>Factura</th><th>Estado</th><th>Fecha facturación</th></tr></thead>
+      <tbody>
+        ${{docs.map(r => `<tr>
+          <td>${{docNum(r.prefactura)}}</td>
+          <td>${{docNum(r.factura)}}</td>
+          <td>${{escHtml(r.estado || '')}}</td>
+          <td>${{escHtml(r.fecha || '—')}}</td>
+        </tr>`).join('')}}
+      </tbody>
+    </table>`;
+}}
+function renderHitsFactura(grupos) {{
+  const box = document.getElementById('fac-caso-hits');
+  const show = grupos.slice(0, 30);
+  const extra = grupos.length > show.length ? ` Mostrando ${{show.length}}. Afina el número.` : '';
+  box.innerHTML = `<div class="msg">${{fmtN(grupos.length)}} casos coinciden.${{extra}} Elige uno.</div>`
+    + show.map(g => {{
+      const c = g[0];
+      const facs = [...new Set(g.map(x => x.factura).filter(Boolean))].join(', ') || '—';
+      const pres = [...new Set(g.map(x => x.prefactura).filter(Boolean))].join(', ') || '—';
+      return `<button type="button" class="hit"><strong>${{escHtml(c.caso)}}</strong> · pre ${{escHtml(pres)}} · fac ${{escHtml(facs)}}</button>`;
+    }}).join('');
+  box.querySelectorAll('button.hit').forEach((btn, i) => {{
+    btn.addEventListener('click', () => {{
+      box.innerHTML = '';
+      pintarFacturaCaso(show[i]);
+    }});
+  }});
+}}
+function buscarFacturaCaso() {{
+  const q = document.getElementById('fac-caso').value;
+  const res = filasFacturaCaso(q);
+  const hits = document.getElementById('fac-caso-hits');
+  const box = document.getElementById('fac-caso-result');
+  box.innerHTML = '';
+  if (res.error) {{ hits.innerHTML = `<div class="msg">${{res.error}}</div>`; return; }}
+  if (!res.grupos.length) {{
+    hits.innerHTML = `<div class="msg">No hay un caso “${{escHtml(normCaso(q))}}” en la consulta.</div>`;
+    return;
+  }}
+  hits.innerHTML = '';
+  if (res.grupos.length === 1) {{ pintarFacturaCaso(res.grupos[0]); return; }}
+  renderHitsFactura(res.grupos);
+}}
+function limpiarFacturaCaso() {{
+  document.getElementById('fac-caso').value = '';
+  document.getElementById('fac-caso-hits').innerHTML = '';
+  document.getElementById('fac-caso-result').innerHTML = '';
+}}
+
+document.getElementById('btn-buscar-fac-caso').addEventListener('click', buscarFacturaCaso);
+document.getElementById('btn-limpiar-fac-caso').addEventListener('click', limpiarFacturaCaso);
+document.getElementById('fac-caso').addEventListener('keydown', ev => {{
+  if (ev.key === 'Enter') {{ ev.preventDefault(); buscarFacturaCaso(); }}
+}});
 document.getElementById('btn-buscar-caso').addEventListener('click', buscarCaso);
 document.getElementById('btn-limpiar-caso').addEventListener('click', limpiarCaso);
 document.getElementById('cal-caso').addEventListener('keydown', ev => {{
@@ -1410,7 +1564,7 @@ def main() -> None:
     }
     OUT_HTML.write_text(render_html(payload), encoding="utf-8")
     print(f"OK -> {OUT_HTML}")
-    print(f"  Serie: {len(datos['serie']):,} grupos · Calendario: {len(datos['calendario']):,} filas · Casos: {len(datos['casos']):,}")
+    print(f"  Serie: {len(datos['serie']):,} grupos · Calendario: {len(datos['calendario']):,} filas · Casos: {len(datos['casos']):,} · Facturas: {len(datos['facturas']):,}")
     k = datos["kpis"]
     print(f"  Venta CLP facturada: ${k.get('venta_clp_facturada') or 0:,.0f}")
 

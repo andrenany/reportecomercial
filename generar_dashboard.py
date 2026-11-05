@@ -1237,6 +1237,7 @@ function renderVentas(rows) {{
   }});
 
   const porProg = groupSum(rows,'programa').sort((a,b)=>b.total-a.total).slice(0,10);
+  fitHorizChart('chartProg', porProg.length, 36);
   charts.prog = new Chart(document.getElementById('chartProg'), {{
     type:'bar',
     data: {{
@@ -1245,11 +1246,11 @@ function renderVentas(rows) {{
     }},
     options: {{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      interaction: interactIndex,
-      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Programa', {{ conTotal: false }}), datalabels: dlMoney({{ horiz:true }}) }},
+      interaction: interactIndexY,
+      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Programa', {{ conTotal: false, axis: 'y' }}), datalabels: dlMoney({{ horiz:true }}) }},
       scales:{{
         x:{{ ticks:{{ callback:v=>fmtM(v), color:'#627D98' }}, grid:{{ color:'#E4EBF2' }} }},
-        y:{{ ticks:{{ color:'#102A43', font:{{size:10}} }}, grid:{{display:false}} }}
+        y:{{ ticks:{{ color:'#102A43', font:{{size:12}}, autoSkip:false }}, grid:{{display:false}} }}
       }}
     }}
   }});
@@ -1257,6 +1258,7 @@ function renderVentas(rows) {{
 
 function renderEmpresas(rows) {{
   const porCli = groupSum(rows,'cliente_corto').sort((a,b)=>b.total-a.total).slice(0,15);
+  fitHorizChart('chartCli', porCli.length, 42);
   charts.cli = new Chart(document.getElementById('chartCli'), {{
     type:'bar',
     data: {{
@@ -1267,17 +1269,18 @@ function renderEmpresas(rows) {{
     }},
     options: {{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      interaction: interactIndex,
-      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Top empresas', {{ conTotal: false }}), datalabels: dlMoney({{ horiz:true }}) }},
+      interaction: interactIndexY,
+      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Top empresas', {{ conTotal: false, axis: 'y' }}), datalabels: dlMoney({{ horiz:true }}) }},
       scales:{{
         x:{{ ticks:{{ callback:v=>fmtM(v), color:'#627D98' }}, grid:{{ color:'#E4EBF2' }} }},
-        y:{{ ticks:{{ color:'#102A43', font:{{size:10}} }}, grid:{{display:false}} }}
+        y:{{ ticks:{{ color:'#102A43', font:{{size:12}}, autoSkip:false }}, grid:{{display:false}} }}
       }}
     }}
   }});
 
   const top10 = groupSum(rows,'cliente_corto').sort((a,b)=>b.total-a.total).slice(0,10);
   const tipos = TIPOS_ORDEN.filter(t => rows.some(r => r.tipo === t));
+  fitHorizChart('chartCliTipo', top10.length, 44);
   charts.cliTipo = new Chart(document.getElementById('chartCliTipo'), {{
     type:'bar',
     data: {{
@@ -1293,15 +1296,15 @@ function renderEmpresas(rows) {{
     }},
     options: {{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      interaction: interactIndex,
+      interaction: interactIndexY,
       plugins:{{
         legend:{{ position:'bottom', labels:{{ boxWidth:12 }} }},
-        tooltip: tipGrupo(() => 'Empresa × tipo', {{ conTotal: true }}),
+        tooltip: tipGrupo(() => 'Empresa × tipo', {{ conTotal: true, axis: 'y' }}),
         datalabels: dlMoney({{ horiz:true, stacked:true, minRatio:0.06 }})
       }},
       scales:{{
         x:{{ stacked:true, ticks:{{ callback:v=>fmtM(v), color:'#627D98' }}, grid:{{ color:'#E4EBF2' }} }},
-        y:{{ stacked:true, ticks:{{ color:'#102A43', font:{{size:10}} }}, grid:{{display:false}} }}
+        y:{{ stacked:true, ticks:{{ color:'#102A43', font:{{size:12}}, autoSkip:false }}, grid:{{display:false}} }}
       }}
     }}
   }});
@@ -1325,8 +1328,7 @@ function renderPendiente(rows) {{
   const meses = [...mesSet].sort((a,b)=>a-b);
   const empresas = [...byEmp.entries()].sort((a,b)=>b[1].total-a[1].total).map(([e]) => e);
 
-  const box = document.getElementById('box-chartPendEmp');
-  if (box) box.style.height = Math.max(320, Math.min(980, 26 * Math.max(empresas.length,1) + 80)) + 'px';
+  fitHorizChart('chartPendEmp', empresas.length, 48);
 
   charts.pendEmp = new Chart(document.getElementById('chartPendEmp'), {{
     type: 'bar',
@@ -1337,21 +1339,21 @@ function renderPendiente(rows) {{
         data: empresas.map(e => byEmp.get(e).byMes[m] || 0),
         backgroundColor: MES_COLORS[(m-1) % MES_COLORS.length],
         stack: 'pend',
-        maxBarThickness: 22,
+        maxBarThickness: 28,
         borderWidth: 0
       }}))
     }},
     options: {{
       indexAxis: 'y', responsive:true, maintainAspectRatio:false,
-      interaction: interactIndex,
+      interaction: interactIndexY,
       plugins: {{
-        legend: {{ position:'bottom', labels:{{ boxWidth:12, font:{{size:10}} }} }},
-        tooltip: tipGrupo(() => 'Pendiente · empresa × mes', {{ conTotal: true }}),
+        legend: {{ position:'bottom', labels:{{ boxWidth:12, font:{{size:11}} }} }},
+        tooltip: tipGrupo(() => 'Pendiente · empresa × mes', {{ conTotal: true, axis: 'y' }}),
         datalabels: dlMoney({{ horiz:true, stacked:true, minRatio:0.06 }})
       }},
       scales: {{
         x: {{ stacked:true, ticks:{{ callback:v=>fmtM(v), color:'#627D98' }}, grid:{{ color:'#E4EBF2' }} }},
-        y: {{ stacked:true, ticks:{{ color:'#102A43', font:{{size:10}} }}, grid:{{display:false}} }}
+        y: {{ stacked:true, ticks:{{ color:'#102A43', font:{{size:12}}, autoSkip:false }}, grid:{{display:false}} }}
       }}
     }}
   }});
@@ -1464,6 +1466,7 @@ function renderCiclo() {{
   }}).filter(x => x.n_ciclo > 0).sort((a,b)=>(b.dias_promedio||0)-(a.dias_promedio||0));
 
   const top = byCli.slice(0,20);
+  fitHorizChart('chartCiclo', top.length, 36);
   charts.ciclo = new Chart(document.getElementById('chartCiclo'), {{
     type:'bar',
     data: {{
@@ -1474,11 +1477,11 @@ function renderCiclo() {{
     }},
     options: {{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      interaction: interactIndex,
-      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Ciclo (días)', {{ conTotal: false }}), datalabels: dlDays() }},
+      interaction: interactIndexY,
+      plugins:{{ legend:{{display:false}}, tooltip: tipGrupo(() => 'Ciclo (días)', {{ conTotal: false, axis: 'y' }}), datalabels: dlDays() }},
       scales:{{
         x:{{ title:{{display:true,text:'Días'}}, grid:{{color:'#E4EBF2'}}, ticks:{{color:'#627D98'}} }},
-        y:{{ ticks:{{color:'#102A43', font:{{size:10}}}}, grid:{{display:false}} }}
+        y:{{ ticks:{{color:'#102A43', font:{{size:12}}, autoSkip:false}}, grid:{{display:false}} }}
       }}
     }}
   }});

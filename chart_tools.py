@@ -132,6 +132,19 @@ CSS_CHART_TOOLS = r"""
     0 8px 20px rgba(0,62,109,.08),
     0 2px 4px rgba(0,42,74,.04);
 }
+.chart-box.scroll-y {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #7f97ab transparent;
+}
+.chart-box.scroll-y::-webkit-scrollbar { width: 10px; }
+.chart-box.scroll-y::-webkit-scrollbar-thumb {
+  background: #8aa4b8;
+  border-radius: 999px;
+  border: 2px solid #f3f7fb;
+}
+.chart-scroll-inner { position: relative; width: 100%; }
 .chart-table-wrap { display:none; overflow:auto; max-height:360px; margin-top:6px; }
 .chart-table-wrap.show { display:block; }
 .chart-table-wrap table { font-size:.8rem; }
@@ -261,10 +274,11 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 1600);
 }
 /** Tooltip agrupado: todas las series del punto + periodo en el título. */
-function tipGrupo(periodoFn, { pct=false, conTotal=false, suffix='' } = {}) {
+function tipGrupo(periodoFn, { pct=false, conTotal=false, suffix='', axis='x' } = {}) {
   return {
     mode: 'index',
     intersect: false,
+    axis,
     callbacks: {
       title(items) {
         const label = items[0]?.label ?? '';
@@ -288,6 +302,23 @@ function tipGrupo(periodoFn, { pct=false, conTotal=false, suffix='' } = {}) {
   };
 }
 const interactIndex = { mode: 'index', intersect: false };
+const interactIndexY = { mode: 'index', axis: 'y', intersect: false };
+function fitHorizChart(canvasId, n, perRow) {
+  const canvas = document.getElementById(canvasId);
+  const box = canvas && canvas.closest('.chart-box');
+  if (!box || !canvas) return;
+  let inner = canvas.parentElement;
+  if (!inner || !inner.classList.contains('chart-scroll-inner')) {
+    inner = document.createElement('div');
+    inner.className = 'chart-scroll-inner';
+    canvas.parentNode.insertBefore(inner, canvas);
+    inner.appendChild(canvas);
+  }
+  const count = Math.max(Number(n) || 0, 1);
+  const row = Number(perRow) || 40;
+  inner.style.height = Math.round(row * count + 72) + 'px';
+  box.classList.add('scroll-y');
+}
 function registerChartTable(id, headers, rows) {
   chartTables[id] = { headers, rows };
   const wrap = document.getElementById('tbl-' + id);

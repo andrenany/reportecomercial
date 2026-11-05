@@ -516,8 +516,7 @@ function renderPorAnio(rows) {{
     .filter(x => Math.abs(x.tot) > 0)
     .sort((a,b) => a.tot - b.tot); // menor (más negativo) abajo / arriba según eje Y invertido
 
-  const boxDelta = document.getElementById('box-chartAnioDeltaEmpSede');
-  if (boxDelta) boxDelta.style.height = Math.max(360, Math.min(900, 22 * Math.max(empresasDelta.length,1) + 90)) + 'px';
+  fitHorizChart('chartAnioDeltaEmpSede', empresasDelta.length, 42);
 
   charts.anioDeltaEmpSede = new Chart(document.getElementById('chartAnioDeltaEmpSede'), {{
     type: 'bar',
@@ -530,15 +529,15 @@ function renderPorAnio(rows) {{
         borderColor: colorSede(s, i),
         borderWidth: 0,
         stack: 'delta',
-        maxBarThickness: 18
+        maxBarThickness: 26
       }}))
     }},
     options: {{
       indexAxis: 'y', responsive:true, maintainAspectRatio:false,
-      interaction: interactIndex,
+      interaction: interactIndexY,
       plugins: {{
         legend:{{ position:'bottom', labels:{{ boxWidth:12, font:{{size:11}} }} }},
-        tooltip: tipGrupo(() => `Δ $ ${{lb}} − ${{la}} · ${{periodoLab}}`, {{ conTotal: true }}),
+        tooltip: tipGrupo(() => `Δ $ ${{lb}} − ${{la}} · ${{periodoLab}}`, {{ conTotal: true, axis: 'y' }}),
         datalabels: dlMoney({{ horiz:true, stacked:true, minRatio:0.05 }})
       }},
       scales: {{
@@ -548,7 +547,7 @@ function renderPorAnio(rows) {{
           grid:{{ color:'#E4EBF2' }},
           title: {{ display:true, text: `Variación $ (${{lb}} vs ${{la}})`, color:'#627D98', font:{{size:11}} }}
         }},
-        y: {{ stacked: true, ticks:{{ color:'#102A43', font:{{size:10}} }}, grid:{{ display:false }} }}
+        y: {{ stacked: true, ticks:{{ color:'#102A43', font:{{size:12}}, autoSkip:false }}, grid:{{ display:false }} }}
       }}
     }}
   }});
@@ -583,31 +582,33 @@ function renderTop(rows) {{
     return {{ e, va, vb, delta: vb-va }};
   }}).sort((x,y) => Math.max(y.va,y.vb) - Math.max(x.va,x.vb)).slice(0,30);
 
+  fitHorizChart('chartTop', rowsTop.length, 58);
   charts.top = new Chart(document.getElementById('chartTop'), {{
     type: 'bar',
     data: {{
       labels: rowsTop.map(r => r.e),
       datasets: [
-        {{ label: la, data: rowsTop.map(r => r.va), backgroundColor: '#003E6D', maxBarThickness: 16, borderRadius: 4 }},
-        {{ label: lb, data: rowsTop.map(r => r.vb), backgroundColor: '#F37021', maxBarThickness: 16, borderRadius: 4 }},
+        {{ label: la, data: rowsTop.map(r => r.va), backgroundColor: '#003E6D', maxBarThickness: 20, borderRadius: 4 }},
+        {{ label: lb, data: rowsTop.map(r => r.vb), backgroundColor: '#F37021', maxBarThickness: 20, borderRadius: 4 }},
       ]
     }},
     options: {{
       indexAxis: 'y', responsive:true, maintainAspectRatio:false,
-      interaction: interactIndex,
+      interaction: interactIndexY,
       plugins: {{
         legend:{{position:'bottom'}},
-        tooltip: tipGrupo(() => `${{la}} vs ${{lb}} · ${{periodoLab}}`, {{ conTotal: false }}),
+        tooltip: tipGrupo(() => `${{la}} vs ${{lb}} · ${{periodoLab}}`, {{ conTotal: false, axis: 'y' }}),
         datalabels: dlMoney({{ horiz:true, minRatio:0.05 }})
       }},
       scales: {{
         x: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }},
-        y: {{ ticks:{{color:'#102A43', font:{{size:10}}}}, grid:{{display:false}} }}
+        y: {{ ticks:{{color:'#102A43', font:{{size:12}}, autoSkip:false}}, grid:{{display:false}} }}
       }}
     }}
   }});
 
   const byDelta = [...rowsTop].sort((x,y) => Math.abs(y.delta)-Math.abs(x.delta)).slice(0,30);
+  fitHorizChart('chartTopDelta', byDelta.length, 44);
   charts.topDelta = new Chart(document.getElementById('chartTopDelta'), {{
     type: 'bar',
     data: {{
@@ -616,20 +617,20 @@ function renderTop(rows) {{
         label: `Δ ${{lb}}-${{la}}`,
         data: byDelta.map(r => r.delta),
         backgroundColor: byDelta.map(r => r.delta>=0 ? '#2F9E71' : '#D64545'),
-        maxBarThickness: 16, borderRadius: 4
+        maxBarThickness: 24, borderRadius: 4
       }}]
     }},
     options: {{
       indexAxis: 'y', responsive:true, maintainAspectRatio:false,
-      interaction: interactIndex,
+      interaction: interactIndexY,
       plugins: {{
         legend:{{display:false}},
-        tooltip: tipGrupo(() => `Δ ${{lb}}-${{la}} · ${{periodoLab}}`, {{ conTotal: false }}),
+        tooltip: tipGrupo(() => `Δ ${{lb}}-${{la}} · ${{periodoLab}}`, {{ conTotal: false, axis: 'y' }}),
         datalabels: dlMoney({{ horiz:true, minRatio:0.04 }})
       }},
       scales: {{
         x: {{ ticks:{{callback:v=>fmtM(v), color:'#627D98'}}, grid:{{color:'#E4EBF2'}} }},
-        y: {{ ticks:{{color:'#102A43', font:{{size:10}}}}, grid:{{display:false}} }}
+        y: {{ ticks:{{color:'#102A43', font:{{size:12}}, autoSkip:false}}, grid:{{display:false}} }}
       }}
     }}
   }});
