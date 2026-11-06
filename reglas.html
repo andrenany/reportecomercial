@@ -364,6 +364,19 @@ table.pivot td.empty { color: #B0BEC5; }
     0 8px 20px rgba(0,62,109,.08),
     0 2px 4px rgba(0,42,74,.04);
 }
+.chart-box.scroll-y {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #7f97ab transparent;
+}
+.chart-box.scroll-y::-webkit-scrollbar { width: 10px; }
+.chart-box.scroll-y::-webkit-scrollbar-thumb {
+  background: #8aa4b8;
+  border-radius: 999px;
+  border: 2px solid #f3f7fb;
+}
+.chart-scroll-inner { position: relative; width: 100%; }
 .chart-table-wrap { display:none; overflow:auto; max-height:360px; margin-top:6px; }
 .chart-table-wrap.show { display:block; }
 .chart-table-wrap table { font-size:.8rem; }
@@ -395,7 +408,7 @@ table.pivot td.empty { color: #B0BEC5; }
       </div>
     </div>
     
-  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-11-05 15:13</p>
+  <p class="hero-mini">Reglas de negocio del dashboard · actualizado 2026-11-06 15:33</p>
   <div class="rule-grid">
     <div class="panel">
       <h2>Fuentes (solo lectura)</h2>
