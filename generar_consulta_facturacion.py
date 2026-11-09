@@ -668,7 +668,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li><strong>Programa</strong> ← <code>nombre_programa</code>.</li>
         <li>Los filtros del calendario (veterinario, cliente/empresa, sede, programa) son multi-selección: vacío = todos.</li>
         <li><strong>Buscar por caso</strong> usa <code>caso_adlab</code>. Cada caso tiene un día de muestreo. Al encontrarlo se lista <strong>todo lo realizado ese día</strong> (sin recortar por veterinario, cliente, sede ni programa). La fila resaltada es la combinación del caso. Acepta el código completo (<code>PM-170523</code>) o solo el número.</li>
-        <li>Al hacer clic en un día se arma el resumen del día sumando N, venta $ y costo operativo $ por veterinario y el detalle por centro.</li>
+        <li>Al hacer clic en un día se arma el resumen del día sumando N, venta $ y costo operativo $ por veterinario, con el id de caso (<code>caso_adlab</code>) en el resumen y en el detalle por centro.</li>
         <li>La tabla del mes y el Excel exportan el mismo detalle filtrado (día, vet, sede, empresa, centro, programa, montos).</li>
         <li>La tabla <strong>Resumen por empresa y sede</strong> se filtra por año(s), mes(es) y programa(s) a elección: empresa, sede, días distintos de muestreo y costo operativo en UF.</li>
       </ul>
@@ -1306,6 +1306,29 @@ function fichaCaso(grupo) {{
     <p class="desc">Todo lo realizado el ${{escHtml(c.dia)}}, sin recortar por veterinario, cliente, sede ni programa. La fila resaltada incluye este caso.</p>`;
 }}
 
+let casosPorLinea = null;
+function indiceCasosLinea() {{
+  if (casosPorLinea) return casosPorLinea;
+  const map = new Map();
+  (RAW.casos || []).forEach(c => {{
+    const k = [c.dia, c.veterinario, c.sede, c.empresa, c.centro || '', c.programa].join('\\t');
+    const arr = map.get(k);
+    if (arr) arr.push(c.caso);
+    else map.set(k, [c.caso]);
+  }});
+  casosPorLinea = map;
+  return map;
+}}
+function casosDeFila(dia, r) {{
+  const k = [dia, r.veterinario, r.sede, r.empresa, r.centro || '', r.programa].join('\\t');
+  return indiceCasosLinea().get(k) || [];
+}}
+function htmlCasos(ids) {{
+  const list = [...new Set(ids)].sort((a, b) => String(a).localeCompare(String(b), 'es', {{ numeric: true }}));
+  if (!list.length) return '—';
+  return list.map(escHtml).join('<br>');
+}}
+
 function showDiaDetalle(dia, doScroll=true, grupo=null) {{
   selectedDia = dia;
   document.querySelectorAll('.cal-day.selected').forEach(el => el.classList.remove('selected'));
@@ -1332,7 +1355,7 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
   const byVet = new Map();
   rows.forEach(r => {{
     const k = r.veterinario;
-    const cur = byVet.get(k) || {{ vet:k, n:0, venta:0, costo:0, empresas:new Set(), programas:new Set(), sedes:new Set(), centros:new Set() }};
+    const cur = byVet.get(k) || {{ vet:k, n:0, venta:0, costo:0, empresas:new Set(), programas:new Set(), sedes:new Set(), centros:new Set(), casos:new Set() }};
     cur.n += Number(r.n)||0;
     cur.venta += Number(r.venta_clp)||0;
     cur.costo += Number(r.costo_operativo_clp)||0;
@@ -1340,6 +1363,7 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
     cur.programas.add(r.programa);
     cur.sedes.add(r.sede);
     cur.centros.add(r.centro || '(sin centro)');
+    casosDeFila(dia, r).forEach(id => cur.casos.add(id));
     byVet.set(k, cur);
   }});
   const vets = [...byVet.values()].sort((a,b)=>b.costo-a.costo);
@@ -1348,7 +1372,7 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
     <p class="desc">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}} registros del día · venta ${{fmtM(sum(rows))}} · <strong>costo operativo ${{fmtM(sum(rows,'costo_operativo_clp'))}}</strong></p>
     <div class="scroll">
     <table>
-      <thead><tr><th>Veterinario</th><th>Sede</th><th>Empresas</th><th>Centros</th><th>Programas</th><th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th></tr></thead>
+      <thead><tr><th>Veterinario</th><th>Sede</th><th>Empresas</th><th>Centros</th><th>Programas</th><th>Casos</th><th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th></tr></thead>
       <tbody>
         ${{vets.map(v => `<tr>
           <td>${{v.vet}}</td>
@@ -1356,12 +1380,13 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
           <td>${{[...v.empresas].join(', ')}}</td>
           <td>${{[...v.centros].join(', ')}}</td>
           <td>${{[...v.programas].join(', ')}}</td>
+          <td>${{htmlCasos(v.casos)}}</td>
           <td class="num">${{fmtN(v.n)}}</td>
           <td class="num">${{fmt(v.venta)}}</td>
           <td class="num">${{fmt(v.costo)}}</td>
         </tr>`).join('')}}
         <tr style="font-weight:700;background:#F7FAFC">
-          <td colspan="5">TOTAL DEL DÍA</td>
+          <td colspan="6">TOTAL DEL DÍA</td>
           <td class="num">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}}</td>
           <td class="num">${{fmt(sum(rows))}}</td>
           <td class="num">${{fmt(sum(rows,'costo_operativo_clp'))}}</td>
@@ -1370,9 +1395,10 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
     </table>
     <h4 style="margin:14px 0 6px;color:var(--navy)">Detalle por centro</h4>
     <table>
-      <thead><tr><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programa</th><th class="num">N</th><th class="num">Costo op. $</th></tr></thead>
+      <thead><tr><th>Caso</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programa</th><th class="num">N</th><th class="num">Costo op. $</th></tr></thead>
       <tbody>
         ${{rows.map(r => `<tr${{grupo && mismaLineaCaso(r, grupo) ? ' class="caso-hit"' : ''}}>
+          <td>${{htmlCasos(casosDeFila(dia, r))}}</td>
           <td>${{r.veterinario}}</td><td>${{r.sede}}</td><td>${{r.empresa}}</td>
           <td>${{r.centro||''}}</td><td>${{r.programa}}</td>
           <td class="num">${{fmtN(r.n)}}</td><td class="num">${{fmt(r.costo_operativo_clp)}}</td>
