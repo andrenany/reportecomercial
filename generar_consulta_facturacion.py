@@ -23,6 +23,7 @@ from chart_tools import CSS_CHART_TOOLS, JS_CHART_TOOLS
 BASE_DIR = Path(__file__).resolve().parent
 OUT_HTML = BASE_DIR / "consulta_facturacion.html"
 VISTA = "dbo.vw_FVivaldiWebSalud"
+VISTA_PLANILLA = "dbo.vw_atv_planilla_detalles"
 EXPR_CLP = "(CAST(fac_vtatotal AS FLOAT) * CAST(ISNULL(fac_uf, 0) AS FLOAT))"
 
 
@@ -200,6 +201,39 @@ def analizar(cur, vista: str) -> dict:
         """,
     )
 
+    print("  · costos planilla (co_km y otros co)...")
+    costos = consultar(
+        cur,
+        f"""
+        SELECT
+            CONVERT(char(10), TRY_CONVERT(date, fecha_muestreo, 103), 23) AS dia,
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_veterinario)), ''), '(sin veterinario)') AS veterinario,
+            ISNULL(NULLIF(LTRIM(RTRIM(empresa_servicio)), ''), '(sin empresa)') AS empresa,
+            ISNULL(NULLIF(LTRIM(RTRIM(centro)), ''), '(sin centro)') AS centro,
+            SUM(CAST(ISNULL(co_km, 0) AS float)) AS co_km,
+            SUM(
+                CAST(ISNULL(co_extra, 0) AS float)
+                + CAST(ISNULL(co_veterinario, 0) AS float)
+            ) AS co_uf,
+            SUM(
+                CAST(ISNULL(co_peaje, 0) AS float)
+                + CAST(ISNULL(co_transbordador, 0) AS float)
+                + CAST(ISNULL(co_taxi, 0) AS float)
+                + CAST(ISNULL(co_pasaje, 0) AS float)
+                + CAST(ISNULL(co_colacion, 0) AS float)
+                + CAST(ISNULL(co_alojamiento, 0) AS float)
+            ) AS co_otros
+        FROM {VISTA_PLANILLA}
+        WHERE TRY_CONVERT(date, fecha_muestreo, 103) IS NOT NULL
+          AND TRY_CONVERT(date, fecha_muestreo, 103) >= '2024-01-01'
+        GROUP BY
+            CONVERT(char(10), TRY_CONVERT(date, fecha_muestreo, 103), 23),
+            ISNULL(NULLIF(LTRIM(RTRIM(nombre_veterinario)), ''), '(sin veterinario)'),
+            ISNULL(NULLIF(LTRIM(RTRIM(empresa_servicio)), ''), '(sin empresa)'),
+            ISNULL(NULLIF(LTRIM(RTRIM(centro)), ''), '(sin centro)')
+        """,
+    )
+
     print("  · KPIs globales...")
     kpis = consultar(
         cur,
@@ -220,7 +254,7 @@ def analizar(cur, vista: str) -> dict:
         """,
     )[0]
 
-    return {"serie": serie, "calendario": calendario, "casos": casos, "facturas": facturas, "kpis": kpis}
+    return {"serie": serie, "calendario": calendario, "casos": casos, "facturas": facturas, "costos": costos, "kpis": kpis}
 
 
 def render_html(payload: dict) -> str:
@@ -549,7 +583,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
   <div id="tab-calendario" class="tab-pane">
     <div class="panel" style="margin-bottom:12px">
       <h3>Día de muestreo</h3>
-      <p class="desc">Empresas y programas por veterinario. Costo operativo = sección “Costo Operativo” (UF × UF del día).</p>
+      <p class="desc">Empresas y programas por veterinario. Costo operativo = sección “Costo Operativo” (UF × UF del día). CO km y otros CO vienen de la planilla, cruzados por fecha, veterinario, empresa de servicio y centro.</p>
       <div class="filters" id="cal-filters" style="margin:10px 0 12px; box-shadow:none">
         <div class="caso-search">
           <span class="lbl">Buscar por caso</span>
@@ -601,8 +635,9 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
           <table id="cal-table">
             <thead>
               <tr>
-                <th>Día</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programa</th>
+                <th>Día</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programas</th>
                 <th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th>
+                <th class="num">CO km</th><th class="num">Aumentos UF</th><th class="num">Otros CO $</th>
               </tr>
             </thead>
             <tbody id="cal-tbody"></tbody>
@@ -633,6 +668,9 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
                 <th>Sede</th>
                 <th class="num">Días</th>
                 <th class="num">Costo operativo UF</th>
+                <th class="num">CO km</th>
+                <th class="num">Aumentos UF</th>
+                <th class="num">Otros CO $</th>
               </tr>
             </thead>
             <tbody id="cal-resumen-tbody"></tbody>
@@ -652,9 +690,14 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
       <ul>
         <li>Se agrupa por <strong>fecha de muestreo</strong> (<code>fecha_muestreo</code>), no por fecha de recepción ni de factura.</li>
         <li>Por cada día se listan <strong>veterinario</strong>, <strong>sede</strong> (lugar de análisis), <strong>empresa</strong>, <strong>centro</strong> y <strong>programa</strong>.</li>
-        <li><strong>Costo operativo $</strong> = solo filas cuya sección es <strong>“Costo Operativo”</strong>, convertidas a pesos (UF × UF del día).</li>
+        <li><strong>Costo operativo $</strong> = solo filas cuya sección es <strong>“Costo Operativo”</strong>, convertidas a pesos (UF × UF del día). Es lo facturado, no lo ingresado en la planilla.</li>
+        <li><strong>CO km</strong>, <strong>Aumentos UF</strong> y <strong>Otros CO $</strong> salen de <strong>dbo.vw_atv_planilla_detalles</strong>. El cruce con FVivaldi es por <strong>fecha de muestreo + veterinario + empresa de servicio + centro</strong> (<code>empresa_servicio</code> = <code>nombre_empresaservicios</code>, <code>centro</code> = <code>nombre_centro</code>).</li>
+        <li><strong>CO km</strong> = <code>co_km</code>, en kilómetros, sin signo peso.</li>
+        <li><strong>Aumentos UF</strong> = <code>co_extra + co_veterinario</code>. Esos dos vienen en UF, no en pesos.</li>
+        <li><strong>Otros CO $</strong> = <code>co_peaje + co_transbordador + co_taxi + co_pasaje + co_colacion + co_alojamiento</code>, en pesos tal como se ingresaron, sin multiplicar por la UF. No incluye <code>ga_vehiculo</code>, <code>ga_consumo</code> ni el texto <code>otros</code>.</li>
+        <li>Esos costos son de la visita. Si el mismo día, veterinario, empresa y centro tiene varios programas, salen <strong>todos en la misma fila</strong> y se muestran una sola vez.</li>
         <li><strong>Costo operativo UF</strong> = las mismas filas de “Costo Operativo”, en UF (<code>fac_vtatotal</code>, sin multiplicar por el valor UF del día).</li>
-        <li><strong>Venta $</strong> = todas las filas del filtro (UF × UF del día), útil como referencia.</li>
+        <li><strong>Venta $</strong> = suma de todas las filas del grupo: <code>fac_vtatotal × fac_uf</code> (UF de la línea × valor UF del día).</li>
         <li>Datos de calendario cargados desde <strong>2024 en adelante</strong>.</li>
       </ul>
 
@@ -705,6 +748,7 @@ const fmtM = n => {{
 }};
 const fmtN = n => new Intl.NumberFormat('es-CL').format(Number(n)||0);
 const fmtUf = n => new Intl.NumberFormat('es-CL', {{ maximumFractionDigits: 1 }}).format(Number(n)||0);
+const fmtDec = fmtUf;
 const fmtUf2 = n => new Intl.NumberFormat('es-CL', {{ minimumFractionDigits: 2, maximumFractionDigits: 2 }}).format(Number(n)||0);
 const uniqueSorted = arr => [...new Set(arr.filter(x => x !== null && x !== undefined && x !== ''))]
   .sort((a,b) => String(a).localeCompare(String(b), 'es', {{ numeric:true }}));
@@ -963,7 +1007,8 @@ function renderCalendario() {{
   calTableRows = rows.slice().sort((a,b) => String(a.dia).localeCompare(String(b.dia))
     || String(a.veterinario).localeCompare(String(b.veterinario), 'es')
     || String(a.empresa).localeCompare(String(b.empresa), 'es')
-    || String(a.centro||'').localeCompare(String(b.centro||''), 'es'));
+    || String(a.centro||'').localeCompare(String(b.centro||''), 'es')
+    || String(a.programa||'').localeCompare(String(b.programa||''), 'es'));
 
   const totVenta = sum(rows);
   const totOp = sum(rows, 'costo_operativo_clp');
@@ -1042,21 +1087,26 @@ function renderCalendario() {{
 
 function renderCalTable() {{
   const rows = calTableRows;
+  const visitas = agruparVisitas(rows);
+  const co = sumarCostos(rows);
   document.getElementById('cal-table-title').textContent = 'Tabla del mes (filtro actual)';
   document.getElementById('cal-table-desc').textContent =
-    `${{rows.length}} filas · costo operativo total ${{fmtM(sum(rows, 'costo_operativo_clp'))}}`;
-  document.getElementById('cal-tbody').innerHTML = rows.map(r => `
+    `${{visitas.length}} visitas · costo operativo ${{fmtM(sum(rows, 'costo_operativo_clp'))}} · CO km ${{fmtDec(co.km)}} · aumentos ${{fmtUf2(co.uf)}} UF · otros CO ${{fmt(co.otros)}}`;
+  document.getElementById('cal-tbody').innerHTML = visitas.map(v => `
     <tr>
-      <td>${{r.dia||''}}</td>
-      <td>${{r.veterinario||''}}</td>
-      <td>${{r.sede||''}}</td>
-      <td>${{r.empresa||''}}</td>
-      <td>${{r.centro||''}}</td>
-      <td>${{r.programa||''}}</td>
-      <td class="num">${{fmtN(r.n)}}</td>
-      <td class="num">${{fmt(r.venta_clp)}}</td>
-      <td class="num">${{fmt(r.costo_operativo_clp)}}</td>
-    </tr>`).join('') || `<tr><td colspan="9" style="color:var(--muted)">Sin datos para el filtro</td></tr>`;
+      <td>${{v.dia||''}}</td>
+      <td>${{v.veterinario||''}}</td>
+      <td>${{v.sede||''}}</td>
+      <td>${{v.empresa||''}}</td>
+      <td>${{v.centro||''}}</td>
+      <td>${{v.programa||''}}</td>
+      <td class="num">${{fmtN(v.n)}}</td>
+      <td class="num">${{fmt(v.venta_clp)}}</td>
+      <td class="num">${{fmt(v.costo_operativo_clp)}}</td>
+      <td class="num">${{fmtDec(v.co_km)}}</td>
+      <td class="num">${{fmtUf2(v.co_uf)}}</td>
+      <td class="num">${{fmt(v.co_otros)}}</td>
+    </tr>`).join('') || `<tr><td colspan="12" style="color:var(--muted)">Sin datos para el filtro</td></tr>`;
   const totN = rows.reduce((a,r)=>a+(Number(r.n)||0),0);
   document.getElementById('cal-tfoot').innerHTML = rows.length ? `
     <tr style="font-weight:700;background:#F7FAFC">
@@ -1064,6 +1114,9 @@ function renderCalTable() {{
       <td class="num">${{fmtN(totN)}}</td>
       <td class="num">${{fmt(sum(rows))}}</td>
       <td class="num">${{fmt(sum(rows, 'costo_operativo_clp'))}}</td>
+      <td class="num">${{fmtDec(co.km)}}</td>
+      <td class="num">${{fmtUf2(co.uf)}}</td>
+      <td class="num">${{fmt(co.otros)}}</td>
     </tr>` : '';
 }}
 
@@ -1117,13 +1170,21 @@ function calResumenAgg() {{
     const emp = r.empresa || '(sin empresa)';
     const sede = r.sede || '(sin sede)';
     const k = emp + '\\t' + sede;
-    const cur = map.get(k) || {{ empresa: emp, sede: sede, dias: new Set(), uf: 0 }};
+    const cur = map.get(k) || {{ empresa: emp, sede: sede, dias: new Set(), uf: 0, visitas: new Set(), km: 0, aumentos: 0, otros: 0 }};
     if (r.dia) cur.dias.add(r.dia);
     cur.uf += Number(r.costo_operativo_uf)||0;
+    const vk = claveCo(r.dia, r.veterinario, r.empresa, r.centro);
+    if (!cur.visitas.has(vk)) {{
+      cur.visitas.add(vk);
+      const c = costoDeFila(r);
+      cur.km += Number(c.co_km) || 0;
+      cur.aumentos += Number(c.co_uf) || 0;
+      cur.otros += Number(c.co_otros) || 0;
+    }}
     map.set(k, cur);
   }});
   return [...map.values()]
-    .map(x => ({{ empresa: x.empresa, sede: x.sede, dias: x.dias.size, uf: x.uf }}))
+    .map(x => ({{ empresa: x.empresa, sede: x.sede, dias: x.dias.size, uf: x.uf, km: x.km, aumentos: x.aumentos, otros: x.otros }}))
     .sort((a,b) => String(a.empresa).localeCompare(String(b.empresa), 'es')
       || String(a.sede).localeCompare(String(b.sede), 'es'));
 }}
@@ -1149,12 +1210,16 @@ function renderCalResumen() {{
   const totDias = items.reduce((a,x) => a + x.dias, 0);
   const totUf = items.reduce((a,x) => a + x.uf, 0);
   const mesesTxt = labelMesesResumen();
+  const co = sumarCostos(filteredCalResumenRows());
   document.getElementById('cal-resumen-desc').textContent =
-    `${{items.length}} combinaciones empresa × sede · ${{mesesTxt}} · respeta filtros de veterinario, cliente y sede`;
+    `${{items.length}} combinaciones empresa × sede · ${{mesesTxt}} · respeta filtros de veterinario, cliente y sede · CO km y otros CO una vez por visita`;
   document.getElementById('cal-resumen-kpis').innerHTML = [
     ['Empresas × sede', fmtN(items.length), mesesTxt, ''],
     ['Días (suma)', fmtN(totDias), 'días de muestreo distintos por fila', ''],
     ['Costo operativo UF', fmtUf2(totUf), 'sección Costo Operativo', 'ok'],
+    ['CO km', fmtDec(co.km), 'kilometraje, una vez por visita', ''],
+    ['Aumentos UF', fmtUf2(co.uf), 'co_extra + co_veterinario', ''],
+    ['Otros CO $', fmt(co.otros), 'peaje, pasajes, colación y alojamiento', ''],
   ].map(([l,v,h,cls]) => `<div class="kpi ${{cls}}"><div class="l">${{l}}</div><div class="v">${{v}}</div><div class="h">${{h}}</div></div>`).join('');
   document.getElementById('cal-resumen-tbody').innerHTML = items.map(x => `
     <tr>
@@ -1162,12 +1227,18 @@ function renderCalResumen() {{
       <td>${{x.sede}}</td>
       <td class="num">${{fmtN(x.dias)}}</td>
       <td class="num">${{fmtUf2(x.uf)}}</td>
-    </tr>`).join('') || `<tr><td colspan="4" style="color:var(--muted)">Sin datos para los meses y filtros elegidos</td></tr>`;
+      <td class="num">${{fmtDec(x.km)}}</td>
+      <td class="num">${{fmtUf2(x.aumentos)}}</td>
+      <td class="num">${{fmt(x.otros)}}</td>
+    </tr>`).join('') || `<tr><td colspan="7" style="color:var(--muted)">Sin datos para los meses y filtros elegidos</td></tr>`;
   document.getElementById('cal-resumen-tfoot').innerHTML = items.length ? `
     <tr style="font-weight:700;background:#F7FAFC">
       <td colspan="2">TOTAL</td>
       <td class="num">${{fmtN(totDias)}}</td>
       <td class="num">${{fmtUf2(totUf)}}</td>
+      <td class="num">${{fmtDec(co.km)}}</td>
+      <td class="num">${{fmtUf2(co.uf)}}</td>
+      <td class="num">${{fmt(co.otros)}}</td>
     </tr>` : '';
 }}
 
@@ -1179,13 +1250,14 @@ function csvCell(v) {{
 function downloadCalResumenExcel() {{
   const items = calResumenAgg();
   if (!items.length) {{ alert('No hay filas para exportar con los meses y filtros actuales.'); return; }}
-  const lines = [['Empresa','Sede','Dias','Costo_Operativo_UF'].join(';')];
+  const lines = [['Empresa','Sede','Dias','Costo_Operativo_UF','CO_km','Aumentos_UF','Otros_CO'].join(';')];
   items.forEach(x => {{
-    lines.push([csvCell(x.empresa), csvCell(x.sede), x.dias, (Number(x.uf)||0).toFixed(2).replace('.', ',')].join(';'));
+    lines.push([csvCell(x.empresa), csvCell(x.sede), x.dias, (Number(x.uf)||0).toFixed(2).replace('.', ','), Math.round(Number(x.km)||0), (Number(x.aumentos)||0).toFixed(2).replace('.', ','), Math.round(Number(x.otros)||0)].join(';'));
   }});
   const totDias = items.reduce((a,x) => a + x.dias, 0);
   const totUf = items.reduce((a,x) => a + x.uf, 0);
-  lines.push(['TOTAL','', totDias, totUf.toFixed(2).replace('.', ',')].join(';'));
+  const co = sumarCostos(filteredCalResumenRows());
+  lines.push(['TOTAL','', totDias, totUf.toFixed(2).replace('.', ','), Math.round(co.km), (Number(co.uf)||0).toFixed(2).replace('.', ','), Math.round(co.otros)].join(';'));
   const bom = '\\uFEFF';
   const blob = new Blob([bom + lines.join('\\r\\n')], {{ type: 'text/csv;charset=utf-8;' }});
   const a = document.createElement('a');
@@ -1328,6 +1400,75 @@ function htmlCasos(ids) {{
   if (!list.length) return '—';
   return list.map(escHtml).join('<br>');
 }}
+let costosPlanilla = null;
+function claveCo(dia, vet, emp, centro) {{
+  return [dia, vet, emp, centro || ''].map(x => String(x || '').trim().toUpperCase()).join('\\t');
+}}
+function indiceCostos() {{
+  if (costosPlanilla) return costosPlanilla;
+  const map = new Map();
+  (RAW.costos || []).forEach(c => {{
+    map.set(claveCo(c.dia, c.veterinario, c.empresa, c.centro), c);
+  }});
+  costosPlanilla = map;
+  return map;
+}}
+function costoDeFila(r) {{
+  return indiceCostos().get(claveCo(r.dia, r.veterinario, r.empresa, r.centro)) || {{ co_km: 0, co_uf: 0, co_otros: 0 }};
+}}
+function sumarCostos(rows) {{
+  const seen = new Set();
+  let km = 0, uf = 0, otros = 0;
+  (rows || []).forEach(r => {{
+    const k = claveCo(r.dia, r.veterinario, r.empresa, r.centro);
+    if (seen.has(k)) return;
+    seen.add(k);
+    const c = indiceCostos().get(k);
+    if (!c) return;
+    km += Number(c.co_km) || 0;
+    uf += Number(c.co_uf) || 0;
+    otros += Number(c.co_otros) || 0;
+  }});
+  return {{ km, uf, otros }};
+}}
+function unirLista(vals) {{
+  return [...new Set((vals || []).filter(v => v != null && String(v) !== ''))]
+    .sort((a, b) => String(a).localeCompare(String(b), 'es'))
+    .join(', ');
+}}
+function agruparVisitas(rows, dia, grupo) {{
+  const map = new Map();
+  const order = [];
+  (rows || []).forEach(r => {{
+    const k = claveCo(r.dia, r.veterinario, r.empresa, r.centro);
+    let g = map.get(k);
+    if (!g) {{
+      g = {{
+        dia: r.dia, veterinario: r.veterinario, empresa: r.empresa, centro: r.centro || '',
+        sedes: [], programas: [], casos: [],
+        n: 0, venta_clp: 0, costo_operativo_clp: 0, hit: false
+      }};
+      map.set(k, g);
+      order.push(g);
+    }}
+    g.sedes.push(r.sede);
+    g.programas.push(r.programa);
+    if (dia) casosDeFila(dia, r).forEach(id => g.casos.push(id));
+    g.n += Number(r.n) || 0;
+    g.venta_clp += Number(r.venta_clp) || 0;
+    g.costo_operativo_clp += Number(r.costo_operativo_clp) || 0;
+    if (grupo && mismaLineaCaso(r, grupo)) g.hit = true;
+  }});
+  return order.map(g => {{
+    const c = costoDeFila(g);
+    return {{
+      dia: g.dia, veterinario: g.veterinario, empresa: g.empresa, centro: g.centro,
+      sede: unirLista(g.sedes), programa: unirLista(g.programas), casos: g.casos,
+      n: g.n, venta_clp: g.venta_clp, costo_operativo_clp: g.costo_operativo_clp,
+      co_km: c.co_km, co_uf: c.co_uf, co_otros: c.co_otros, hit: g.hit
+    }};
+  }});
+}}
 
 function showDiaDetalle(dia, doScroll=true, grupo=null) {{
   selectedDia = dia;
@@ -1339,7 +1480,10 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
   box.classList.add('highlight');
   const fuente = grupo ? (RAW.calendario || []) : calTableRows;
   const rows = fuente.filter(r => r.dia === dia)
-    .sort((a,b) => (b.costo_operativo_clp||0)-(a.costo_operativo_clp||0));
+    .sort((a,b) => String(a.veterinario).localeCompare(String(b.veterinario), 'es')
+      || String(a.empresa).localeCompare(String(b.empresa), 'es')
+      || String(a.centro||'').localeCompare(String(b.centro||''), 'es')
+      || String(a.programa||'').localeCompare(String(b.programa||''), 'es'));
   document.getElementById('cal-detail-title').textContent = grupo
     ? `Caso ${{grupo[0].caso}} · día de muestreo ${{dia}}`
     : `Resumen del día · ${{dia}}`;
@@ -1355,7 +1499,7 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
   const byVet = new Map();
   rows.forEach(r => {{
     const k = r.veterinario;
-    const cur = byVet.get(k) || {{ vet:k, n:0, venta:0, costo:0, empresas:new Set(), programas:new Set(), sedes:new Set(), centros:new Set(), casos:new Set() }};
+    const cur = byVet.get(k) || {{ vet:k, n:0, venta:0, costo:0, empresas:new Set(), programas:new Set(), sedes:new Set(), centros:new Set(), casos:new Set(), filas:[] }};
     cur.n += Number(r.n)||0;
     cur.venta += Number(r.venta_clp)||0;
     cur.costo += Number(r.costo_operativo_clp)||0;
@@ -1363,18 +1507,22 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
     cur.programas.add(r.programa);
     cur.sedes.add(r.sede);
     cur.centros.add(r.centro || '(sin centro)');
+    cur.filas.push(r);
     casosDeFila(dia, r).forEach(id => cur.casos.add(id));
     byVet.set(k, cur);
   }});
   const vets = [...byVet.values()].sort((a,b)=>b.costo-a.costo);
+  const coDia = sumarCostos(rows);
   document.getElementById('cal-detail-body').innerHTML = `
     ${{grupo ? fichaCaso(grupo) : ''}}
-    <p class="desc">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}} registros del día · venta ${{fmtM(sum(rows))}} · <strong>costo operativo ${{fmtM(sum(rows,'costo_operativo_clp'))}}</strong></p>
+    <p class="desc">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}} registros del día · venta ${{fmtM(sum(rows))}} · <strong>costo operativo ${{fmtM(sum(rows,'costo_operativo_clp'))}}</strong> · CO km ${{fmtDec(coDia.km)}} · aumentos ${{fmtUf2(coDia.uf)}} UF · otros CO ${{fmt(coDia.otros)}}</p>
     <div class="scroll">
     <table>
-      <thead><tr><th>Veterinario</th><th>Sede</th><th>Empresas</th><th>Centros</th><th>Programas</th><th>Casos</th><th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th></tr></thead>
+      <thead><tr><th>Veterinario</th><th>Sede</th><th>Empresas</th><th>Centros</th><th>Programas</th><th>Casos</th><th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th><th class="num">CO km</th><th class="num">Aumentos UF</th><th class="num">Otros CO $</th></tr></thead>
       <tbody>
-        ${{vets.map(v => `<tr>
+        ${{vets.map(v => {{
+          const co = sumarCostos(v.filas);
+          return `<tr>
           <td>${{v.vet}}</td>
           <td>${{[...v.sedes].join(', ')}}</td>
           <td>${{[...v.empresas].join(', ')}}</td>
@@ -1384,49 +1532,73 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
           <td class="num">${{fmtN(v.n)}}</td>
           <td class="num">${{fmt(v.venta)}}</td>
           <td class="num">${{fmt(v.costo)}}</td>
-        </tr>`).join('')}}
+          <td class="num">${{fmtDec(co.km)}}</td>
+          <td class="num">${{fmtUf2(co.uf)}}</td>
+          <td class="num">${{fmt(co.otros)}}</td>
+        </tr>`;
+        }}).join('')}}
         <tr style="font-weight:700;background:#F7FAFC">
           <td colspan="6">TOTAL DEL DÍA</td>
           <td class="num">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}}</td>
           <td class="num">${{fmt(sum(rows))}}</td>
           <td class="num">${{fmt(sum(rows,'costo_operativo_clp'))}}</td>
+          <td class="num">${{fmtDec(coDia.km)}}</td>
+          <td class="num">${{fmtUf2(coDia.uf)}}</td>
+          <td class="num">${{fmt(coDia.otros)}}</td>
         </tr>
       </tbody>
     </table>
     <h4 style="margin:14px 0 6px;color:var(--navy)">Detalle por centro</h4>
     <table>
-      <thead><tr><th>Caso</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programa</th><th class="num">N</th><th class="num">Costo op. $</th></tr></thead>
+      <thead><tr><th>Caso</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programas</th><th class="num">N</th><th class="num">Costo op. $</th><th class="num">CO km</th><th class="num">Aumentos UF</th><th class="num">Otros CO $</th></tr></thead>
       <tbody>
-        ${{rows.map(r => `<tr${{grupo && mismaLineaCaso(r, grupo) ? ' class="caso-hit"' : ''}}>
-          <td>${{htmlCasos(casosDeFila(dia, r))}}</td>
-          <td>${{r.veterinario}}</td><td>${{r.sede}}</td><td>${{r.empresa}}</td>
-          <td>${{r.centro||''}}</td><td>${{r.programa}}</td>
-          <td class="num">${{fmtN(r.n)}}</td><td class="num">${{fmt(r.costo_operativo_clp)}}</td>
+        ${{agruparVisitas(rows, dia, grupo).map(v => `<tr${{v.hit ? ' class="caso-hit"' : ''}}>
+          <td>${{htmlCasos(v.casos)}}</td>
+          <td>${{v.veterinario}}</td><td>${{v.sede}}</td><td>${{v.empresa}}</td>
+          <td>${{v.centro||''}}</td><td>${{v.programa}}</td>
+          <td class="num">${{fmtN(v.n)}}</td><td class="num">${{fmt(v.costo_operativo_clp)}}</td>
+          <td class="num">${{fmtDec(v.co_km)}}</td><td class="num">${{fmtUf2(v.co_uf)}}</td><td class="num">${{fmt(v.co_otros)}}</td>
         </tr>`).join('')}}
+        <tr style="font-weight:700;background:#F7FAFC">
+          <td colspan="6">TOTAL</td>
+          <td class="num">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}}</td>
+          <td class="num">${{fmt(sum(rows,'costo_operativo_clp'))}}</td>
+          <td class="num">${{fmtDec(coDia.km)}}</td>
+          <td class="num">${{fmtUf2(coDia.uf)}}</td>
+          <td class="num">${{fmt(coDia.otros)}}</td>
+        </tr>
       </tbody>
     </table>
     </div>`;
   if (doScroll) box.scrollIntoView({{ behavior:'smooth', block:'nearest' }});
 }}
 
+function csvNum(n) {{
+  return (Math.round((Number(n) || 0) * 10) / 10).toFixed(1).replace('.', ',');
+}}
+
 function downloadCalExcel() {{
   const rows = calTableRows;
   if (!rows.length) {{ alert('No hay filas para exportar con el filtro actual.'); return; }}
-  const headers = ['Dia','Veterinario','Sede','Empresa','Centro','Programa','N','Venta_CLP','Costo_Operativo_CLP'];
+  const headers = ['Dia','Veterinario','Sede','Empresa','Centro','Programa','N','Venta_CLP','Costo_Operativo_CLP','CO_km','Aumentos_UF','Otros_CO'];
   const lines = [headers.join(';')];
-  rows.forEach(r => {{
+  agruparVisitas(rows).forEach(v => {{
     lines.push([
-      r.dia, r.veterinario, r.sede, r.empresa, r.centro||'', r.programa,
-      Number(r.n)||0,
-      Math.round(Number(r.venta_clp)||0),
-      Math.round(Number(r.costo_operativo_clp)||0)
+      v.dia, v.veterinario, v.sede, v.empresa, v.centro||'', v.programa,
+      Number(v.n)||0,
+      Math.round(Number(v.venta_clp)||0),
+      Math.round(Number(v.costo_operativo_clp)||0),
+      Math.round(Number(v.co_km)||0),
+      (Number(v.co_uf)||0).toFixed(2).replace('.', ','),
+      Math.round(Number(v.co_otros)||0)
     ].map(v => {{
       const s = String(v ?? '');
       return /[;"\\n]/.test(s) ? `"${{s.replace(/"/g,'""')}}"` : s;
     }}).join(';'));
   }});
   const totN = rows.reduce((a,r)=>a+(Number(r.n)||0),0);
-  lines.push(['TOTAL','','','','','', totN, Math.round(sum(rows)), Math.round(sum(rows,'costo_operativo_clp'))].join(';'));
+  const co = sumarCostos(rows);
+  lines.push(['TOTAL','','','','','', totN, Math.round(sum(rows)), Math.round(sum(rows,'costo_operativo_clp')), Math.round(co.km), (Number(co.uf)||0).toFixed(2).replace('.', ','), Math.round(co.otros)].join(';'));
   const bom = '\\uFEFF';
   const blob = new Blob([bom + lines.join('\\r\\n')], {{ type: 'text/csv;charset=utf-8;' }});
   const anio = document.getElementById('cal-anio').value;
@@ -1590,7 +1762,7 @@ def main() -> None:
     }
     OUT_HTML.write_text(render_html(payload), encoding="utf-8")
     print(f"OK -> {OUT_HTML}")
-    print(f"  Serie: {len(datos['serie']):,} grupos · Calendario: {len(datos['calendario']):,} filas · Casos: {len(datos['casos']):,} · Facturas: {len(datos['facturas']):,}")
+    print(f"  Serie: {len(datos['serie']):,} grupos · Calendario: {len(datos['calendario']):,} filas · Casos: {len(datos['casos']):,} · Facturas: {len(datos['facturas']):,} · Costos planilla: {len(datos['costos']):,}")
     k = datos["kpis"]
     print(f"  Venta CLP facturada: ${k.get('venta_clp_facturada') or 0:,.0f}")
 
