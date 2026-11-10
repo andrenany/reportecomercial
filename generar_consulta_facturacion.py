@@ -424,9 +424,12 @@ body {{
   box-shadow:0 8px 24px rgba(243,112,33,.12);
 }}
 .cal-detail table {{ width:100%; border-collapse:collapse; font-size:.82rem; }}
-.cal-detail th, .cal-detail td {{ padding:7px 8px; border-bottom:1px solid var(--line); text-align:left; }}
-.cal-detail th {{ color:var(--muted); font-size:.72rem; text-transform:uppercase; }}
-.cal-detail td.num, .cal-detail th.num {{ text-align:right; font-variant-numeric:tabular-nums; }}
+.cal-detail th, .cal-detail td {{ padding:7px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }}
+.cal-detail th {{ color:var(--muted); font-size:.72rem; text-transform:uppercase; white-space:nowrap; }}
+.cal-detail td {{ max-width:200px; }}
+.cal-detail td.num, .cal-detail th.num {{ max-width:none; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }}
+.cal-detail tr.co-falta td {{ background:#FFF4E8; }}
+.cal-detail td.co-alerta {{ max-width:none; color:#9A3412; font-weight:800; font-size:.72rem; letter-spacing:.02em; white-space:nowrap; }}
 .cal-detail .scroll {{ max-height:360px; overflow:auto; }}
 .caso-search {{
   width:100%; background:#F7FAFC; border:1px solid var(--line); border-radius:14px; padding:12px;
@@ -631,13 +634,21 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
           </div>
           <button type="button" class="chip" id="btn-excel-cal" style="border-radius:999px;padding:9px 14px;background:var(--ok);color:#fff;border-color:var(--ok)">Descargar Excel</button>
         </div>
+        <div class="filters" style="margin:12px 0 0; box-shadow:none; padding:10px 12px">
+          <p class="hint-multi">Puedes marcar varios años, meses, empresas y programas. Si no marcas año o mes, usa el del calendario. Si no marcas empresa o programa, usa el filtro de arriba.</p>
+          <label class="f" style="min-width:140px">Años<div class="msel" id="cal-tabla-anio" data-empty="Año del calendario"></div></label>
+          <label class="f" style="min-width:200px">Meses<div class="msel" id="cal-tabla-mes" data-empty="Mes del calendario"></div></label>
+          <label class="f" style="min-width:220px;flex:1">Empresa<div class="msel" id="cal-tabla-empresa" data-empty="Todas / filtro de arriba"></div></label>
+          <label class="f" style="min-width:220px;flex:1">Programa<div class="msel" id="cal-tabla-programa" data-empty="Todos / filtro de arriba"></div></label>
+        </div>
         <div class="scroll" style="max-height:420px;overflow:auto;margin-top:10px">
           <table id="cal-table">
             <thead>
               <tr>
-                <th>Día</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programas</th>
+                <th>Día</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programas</th><th>Casos</th>
                 <th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th>
                 <th class="num">CO km</th><th class="num">Aumentos UF</th><th class="num">Otros CO $</th>
+                <th>Comentario</th>
               </tr>
             </thead>
             <tbody id="cal-tbody"></tbody>
@@ -696,6 +707,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li><strong>Aumentos UF</strong> = <code>co_extra + co_veterinario</code>. Esos dos vienen en UF, no en pesos.</li>
         <li><strong>Otros CO $</strong> = <code>co_peaje + co_transbordador + co_taxi + co_pasaje + co_colacion + co_alojamiento</code>, en pesos tal como se ingresaron, sin multiplicar por la UF. No incluye <code>ga_vehiculo</code>, <code>ga_consumo</code> ni el texto <code>otros</code>.</li>
         <li>Esos costos son de la visita. Si el mismo día, veterinario, empresa y centro tiene varios programas, salen <strong>todos en la misma fila</strong> y se muestran una sola vez.</li>
+        <li>Si en la planilla <strong>todos los co_</strong> de esa visita están en 0 (o no hay fila), la visita se marca con <strong>OPERATIVO NO INGRESADO</strong>. Los programas de <strong>screening</strong> no llevan esa alerta.</li>
         <li><strong>Costo operativo UF</strong> = las mismas filas de “Costo Operativo”, en UF (<code>fac_vtatotal</code>, sin multiplicar por el valor UF del día).</li>
         <li><strong>Venta $</strong> = suma de todas las filas del grupo: <code>fac_vtatotal × fac_uf</code> (UF de la línea × valor UF del día).</li>
         <li>Datos de calendario cargados desde <strong>2024 en adelante</strong>.</li>
@@ -712,7 +724,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li>Los filtros del calendario (veterinario, cliente/empresa, sede, programa) son multi-selección: vacío = todos.</li>
         <li><strong>Buscar por caso</strong> usa <code>caso_adlab</code>. Cada caso tiene un día de muestreo. Al encontrarlo se lista <strong>todo lo realizado ese día</strong> (sin recortar por veterinario, cliente, sede ni programa). La fila resaltada es la combinación del caso. Acepta el código completo (<code>PM-170523</code>) o solo el número.</li>
         <li>Al hacer clic en un día se arma el resumen del día sumando N, venta $ y costo operativo $ por veterinario, con el id de caso (<code>caso_adlab</code>) en el resumen y en el detalle por centro.</li>
-        <li>La tabla del mes y el Excel exportan el mismo detalle filtrado (día, vet, sede, empresa, centro, programa, montos).</li>
+        <li>La <strong>tabla del mes</strong> lista casos como el resumen del día. Ahí puedes marcar varios años, meses, empresas y programas, sin cambiar el calendario de arriba. El Excel exporta ese mismo detalle.</li>
         <li>La tabla <strong>Resumen por empresa y sede</strong> se filtra por año(s), mes(es) y programa(s) a elección: empresa, sede, días distintos de muestreo y costo operativo en UF.</li>
       </ul>
 
@@ -948,6 +960,8 @@ function renderAnalisis() {{
 let selectedDia = null;
 let calTableRows = [];
 let casoActivo = null;
+let calTablaMesManual = false;
+let calTablaAnioManual = false;
 
 function calBaseRows() {{
   const ocultar = document.getElementById('cal-ocultar-na').checked;
@@ -979,7 +993,66 @@ function fillCalFilters() {{
   else if (anios.length) selA.value = anios[anios.length-1];
   if (prevM) selM.value = prevM;
   else selM.value = String(new Date().getMonth()+1);
+  fillCalTableFiltros();
   fillCalResumenPeriodo();
+}}
+
+function mesesCalendario() {{
+  const vals = ['1','2','3','4','5','6','7','8','9','10','11','12'];
+  const labels = Object.fromEntries(vals.map(m => [m, MESES_L[Number(m)]]));
+  return {{ vals, labels }};
+}}
+
+function aniosCalendario() {{
+  return uniqueSorted(calBaseRows().map(r => String(r.dia || '').slice(0, 4))).filter(Boolean);
+}}
+
+function fillCalTableFiltros() {{
+  const rows = calBaseRows();
+  const {{ vals, labels }} = mesesCalendario();
+  const anios = aniosCalendario();
+  const empresas = uniqueSorted(rows.map(r => r.empresa));
+  const programas = uniqueSorted(rows.map(r => r.programa));
+  const prevE = selectedMulti('cal-tabla-empresa').filter(v => empresas.includes(v));
+  const prevP = selectedMulti('cal-tabla-programa').filter(v => programas.includes(v));
+  const mesCal = String(Number(document.getElementById('cal-mes').value) || 0);
+  const anioCal = String(document.getElementById('cal-anio').value || '');
+  const prevM = calTablaMesManual
+    ? selectedMulti('cal-tabla-mes').filter(v => vals.includes(v))
+    : (vals.includes(mesCal) ? [mesCal] : []);
+  const prevA = calTablaAnioManual
+    ? selectedMulti('cal-tabla-anio').filter(v => anios.includes(v))
+    : (anios.includes(anioCal) ? [anioCal] : []);
+  fillMulti('cal-tabla-anio', anios, prevA);
+  fillMulti('cal-tabla-mes', vals, prevM, labels);
+  fillMulti('cal-tabla-empresa', empresas, prevE);
+  fillMulti('cal-tabla-programa', programas, prevP);
+}}
+
+function rowsTablaMes() {{
+  const anios = new Set(selectedMulti('cal-tabla-anio'));
+  const meses = new Set(selectedMulti('cal-tabla-mes').map(Number));
+  const empresasTabla = selectedMulti('cal-tabla-empresa');
+  const empresas = new Set(empresasTabla.length ? empresasTabla : selectedMulti('cal-cliente'));
+  const progsTabla = selectedMulti('cal-tabla-programa');
+  const progs = new Set(progsTabla.length ? progsTabla : selectedMulti('cal-programa'));
+  const vets = new Set(selectedMulti('cal-vet'));
+  const sedes = new Set(selectedMulti('cal-sede'));
+  return calBaseRows().filter(r => {{
+    const d = String(r.dia || '');
+    if (anios.size && !anios.has(d.slice(0, 4))) return false;
+    const m = Number(d.slice(5, 7));
+    if (meses.size && !meses.has(m)) return false;
+    if (vets.size && !vets.has(r.veterinario)) return false;
+    if (empresas.size && !empresas.has(r.empresa)) return false;
+    if (sedes.size && !sedes.has(r.sede)) return false;
+    if (progs.size && !progs.has(r.programa)) return false;
+    return true;
+  }}).sort((a,b) => String(a.dia).localeCompare(String(b.dia))
+    || String(a.veterinario).localeCompare(String(b.veterinario), 'es')
+    || String(a.empresa).localeCompare(String(b.empresa), 'es')
+    || String(a.centro||'').localeCompare(String(b.centro||''), 'es')
+    || String(a.programa||'').localeCompare(String(b.programa||''), 'es'));
 }}
 
 function filteredCalRows() {{
@@ -1076,6 +1149,13 @@ function renderCalendario() {{
     el.addEventListener('keydown', (ev) => {{ if (ev.key === 'Enter' || ev.key === ' ') {{ ev.preventDefault(); open(); }} }});
   }});
 
+  if (!calTablaAnioManual) {{
+    fillMulti('cal-tabla-anio', aniosCalendario(), [String(anio)]);
+  }}
+  if (!calTablaMesManual) {{
+    const pack = mesesCalendario();
+    fillMulti('cal-tabla-mes', pack.vals, [String(mes)], pack.labels);
+  }}
   renderCalTable();
   renderCalResumen();
   const prefixMes = `${{anio}}-${{String(mes).padStart(2,'0')}}`;
@@ -1085,38 +1165,56 @@ function renderCalendario() {{
     showDiaDetalle(selectedDia, false);
 }}
 
+function textoCasos(ids) {{
+  const list = [...new Set(ids || [])].sort((a, b) => String(a).localeCompare(String(b), 'es', {{ numeric: true }}));
+  return list.join(', ');
+}}
+
 function renderCalTable() {{
-  const rows = calTableRows;
+  const rows = rowsTablaMes();
+  calTableRows = rows;
   const visitas = agruparVisitas(rows);
   const co = sumarCostos(rows);
-  document.getElementById('cal-table-title').textContent = 'Tabla del mes (filtro actual)';
+  const anios = selectedMulti('cal-tabla-anio');
+  const meses = selectedMulti('cal-tabla-mes');
+  const empresas = selectedMulti('cal-tabla-empresa');
+  const programas = selectedMulti('cal-tabla-programa');
+  const anioTxt = !anios.length ? 'todos los años' : anios.join(', ');
+  const mesTxt = !meses.length ? 'todos los meses'
+    : meses.map(m => MESES_L[Number(m)] || m).join(', ');
+  const empTxt = !empresas.length ? 'empresas del filtro de arriba' : empresas.length + ' empresa(s)';
+  const progTxt = !programas.length ? 'programas del filtro de arriba' : programas.length + ' programa(s)';
+  document.getElementById('cal-table-title').textContent = (anios.length > 1 || meses.length > 1) ? 'Tabla de los meses' : 'Tabla del mes';
   document.getElementById('cal-table-desc').textContent =
-    `${{visitas.length}} visitas · costo operativo ${{fmtM(sum(rows, 'costo_operativo_clp'))}} · CO km ${{fmtDec(co.km)}} · aumentos ${{fmtUf2(co.uf)}} UF · otros CO ${{fmt(co.otros)}}`;
+    `${{anioTxt}} · ${{mesTxt}} · ${{empTxt}} · ${{progTxt}} · ${{visitas.length}} visitas · costo operativo ${{fmtM(sum(rows, 'costo_operativo_clp'))}} · CO km ${{fmtDec(co.km)}} · aumentos ${{fmtUf2(co.uf)}} UF · otros CO ${{fmt(co.otros)}}`;
   document.getElementById('cal-tbody').innerHTML = visitas.map(v => `
-    <tr>
+    <tr${{faltaOperativo(v.co_km, v.co_uf, v.co_otros, v.programa) ? ' class="co-falta"' : ''}}>
       <td>${{v.dia||''}}</td>
       <td>${{v.veterinario||''}}</td>
       <td>${{v.sede||''}}</td>
       <td>${{v.empresa||''}}</td>
       <td>${{v.centro||''}}</td>
       <td>${{v.programa||''}}</td>
+      <td>${{htmlCasos(v.casos)}}</td>
       <td class="num">${{fmtN(v.n)}}</td>
       <td class="num">${{fmt(v.venta_clp)}}</td>
       <td class="num">${{fmt(v.costo_operativo_clp)}}</td>
       <td class="num">${{fmtDec(v.co_km)}}</td>
       <td class="num">${{fmtUf2(v.co_uf)}}</td>
       <td class="num">${{fmt(v.co_otros)}}</td>
-    </tr>`).join('') || `<tr><td colspan="12" style="color:var(--muted)">Sin datos para el filtro</td></tr>`;
+      ${{celdaAlertaCo(v.co_km, v.co_uf, v.co_otros, v.programa)}}
+    </tr>`).join('') || `<tr><td colspan="14" style="color:var(--muted)">Sin datos para el filtro</td></tr>`;
   const totN = rows.reduce((a,r)=>a+(Number(r.n)||0),0);
   document.getElementById('cal-tfoot').innerHTML = rows.length ? `
     <tr style="font-weight:700;background:#F7FAFC">
-      <td colspan="6">TOTAL</td>
+      <td colspan="7">TOTAL</td>
       <td class="num">${{fmtN(totN)}}</td>
       <td class="num">${{fmt(sum(rows))}}</td>
       <td class="num">${{fmt(sum(rows, 'costo_operativo_clp'))}}</td>
       <td class="num">${{fmtDec(co.km)}}</td>
       <td class="num">${{fmtUf2(co.uf)}}</td>
       <td class="num">${{fmt(co.otros)}}</td>
+      <td></td>
     </tr>` : '';
 }}
 
@@ -1431,6 +1529,25 @@ function sumarCostos(rows) {{
   }});
   return {{ km, uf, otros }};
 }}
+function sinOperativo(km, uf, otros) {{
+  const cero = n => Math.abs(Number(n) || 0) < 0.0001;
+  return cero(km) && cero(uf) && cero(otros);
+}}
+function esScreening(nombre) {{
+  return String(nombre || '').toUpperCase().includes('SCREEN');
+}}
+function soloScreening(programas) {{
+  const list = Array.isArray(programas) ? programas : String(programas || '').split(',');
+  const limpios = list.map(p => String(p).trim()).filter(Boolean);
+  return limpios.length > 0 && limpios.every(esScreening);
+}}
+function faltaOperativo(km, uf, otros, programas) {{
+  if (soloScreening(programas)) return false;
+  return sinOperativo(km, uf, otros);
+}}
+function celdaAlertaCo(km, uf, otros, programas) {{
+  return faltaOperativo(km, uf, otros, programas) ? '<td class="co-alerta">OPERATIVO NO INGRESADO</td>' : '<td></td>';
+}}
 function unirLista(vals) {{
   return [...new Set((vals || []).filter(v => v != null && String(v) !== ''))]
     .sort((a, b) => String(a).localeCompare(String(b), 'es'))
@@ -1453,7 +1570,7 @@ function agruparVisitas(rows, dia, grupo) {{
     }}
     g.sedes.push(r.sede);
     g.programas.push(r.programa);
-    if (dia) casosDeFila(dia, r).forEach(id => g.casos.push(id));
+    casosDeFila(r.dia, r).forEach(id => g.casos.push(id));
     g.n += Number(r.n) || 0;
     g.venta_clp += Number(r.venta_clp) || 0;
     g.costo_operativo_clp += Number(r.costo_operativo_clp) || 0;
@@ -1518,11 +1635,12 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
     <p class="desc">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}} registros del día · venta ${{fmtM(sum(rows))}} · <strong>costo operativo ${{fmtM(sum(rows,'costo_operativo_clp'))}}</strong> · CO km ${{fmtDec(coDia.km)}} · aumentos ${{fmtUf2(coDia.uf)}} UF · otros CO ${{fmt(coDia.otros)}}</p>
     <div class="scroll">
     <table>
-      <thead><tr><th>Veterinario</th><th>Sede</th><th>Empresas</th><th>Centros</th><th>Programas</th><th>Casos</th><th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th><th class="num">CO km</th><th class="num">Aumentos UF</th><th class="num">Otros CO $</th></tr></thead>
+      <thead><tr><th>Veterinario</th><th>Sede</th><th>Empresas</th><th>Centros</th><th>Programas</th><th>Casos</th><th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th><th class="num">CO km</th><th class="num">Aumentos UF</th><th class="num">Otros CO $</th><th>Comentario</th></tr></thead>
       <tbody>
         ${{vets.map(v => {{
           const co = sumarCostos(v.filas);
-          return `<tr>
+          const falta = faltaOperativo(co.km, co.uf, co.otros, [...v.programas]);
+          return `<tr${{falta ? ' class="co-falta"' : ''}}>
           <td>${{v.vet}}</td>
           <td>${{[...v.sedes].join(', ')}}</td>
           <td>${{[...v.empresas].join(', ')}}</td>
@@ -1535,6 +1653,7 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
           <td class="num">${{fmtDec(co.km)}}</td>
           <td class="num">${{fmtUf2(co.uf)}}</td>
           <td class="num">${{fmt(co.otros)}}</td>
+          ${{celdaAlertaCo(co.km, co.uf, co.otros, [...v.programas])}}
         </tr>`;
         }}).join('')}}
         <tr style="font-weight:700;background:#F7FAFC">
@@ -1545,20 +1664,26 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
           <td class="num">${{fmtDec(coDia.km)}}</td>
           <td class="num">${{fmtUf2(coDia.uf)}}</td>
           <td class="num">${{fmt(coDia.otros)}}</td>
+          <td></td>
         </tr>
       </tbody>
     </table>
     <h4 style="margin:14px 0 6px;color:var(--navy)">Detalle por centro</h4>
     <table>
-      <thead><tr><th>Caso</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programas</th><th class="num">N</th><th class="num">Costo op. $</th><th class="num">CO km</th><th class="num">Aumentos UF</th><th class="num">Otros CO $</th></tr></thead>
+      <thead><tr><th>Caso</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programas</th><th class="num">N</th><th class="num">Costo op. $</th><th class="num">CO km</th><th class="num">Aumentos UF</th><th class="num">Otros CO $</th><th>Comentario</th></tr></thead>
       <tbody>
-        ${{agruparVisitas(rows, dia, grupo).map(v => `<tr${{v.hit ? ' class="caso-hit"' : ''}}>
+        ${{agruparVisitas(rows, dia, grupo).map(v => {{
+          const falta = faltaOperativo(v.co_km, v.co_uf, v.co_otros, v.programa);
+          const cls = [v.hit ? 'caso-hit' : '', falta ? 'co-falta' : ''].filter(Boolean).join(' ');
+          return `<tr${{cls ? ` class="${{cls}}"` : ''}}>
           <td>${{htmlCasos(v.casos)}}</td>
           <td>${{v.veterinario}}</td><td>${{v.sede}}</td><td>${{v.empresa}}</td>
           <td>${{v.centro||''}}</td><td>${{v.programa}}</td>
           <td class="num">${{fmtN(v.n)}}</td><td class="num">${{fmt(v.costo_operativo_clp)}}</td>
           <td class="num">${{fmtDec(v.co_km)}}</td><td class="num">${{fmtUf2(v.co_uf)}}</td><td class="num">${{fmt(v.co_otros)}}</td>
-        </tr>`).join('')}}
+          ${{celdaAlertaCo(v.co_km, v.co_uf, v.co_otros, v.programa)}}
+        </tr>`;
+        }}).join('')}}
         <tr style="font-weight:700;background:#F7FAFC">
           <td colspan="6">TOTAL</td>
           <td class="num">${{fmtN(rows.reduce((a,r)=>a+(Number(r.n)||0),0))}}</td>
@@ -1566,6 +1691,7 @@ function showDiaDetalle(dia, doScroll=true, grupo=null) {{
           <td class="num">${{fmtDec(coDia.km)}}</td>
           <td class="num">${{fmtUf2(coDia.uf)}}</td>
           <td class="num">${{fmt(coDia.otros)}}</td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -1580,17 +1706,18 @@ function csvNum(n) {{
 function downloadCalExcel() {{
   const rows = calTableRows;
   if (!rows.length) {{ alert('No hay filas para exportar con el filtro actual.'); return; }}
-  const headers = ['Dia','Veterinario','Sede','Empresa','Centro','Programa','N','Venta_CLP','Costo_Operativo_CLP','CO_km','Aumentos_UF','Otros_CO'];
+  const headers = ['Dia','Veterinario','Sede','Empresa','Centro','Programa','Casos','N','Venta_CLP','Costo_Operativo_CLP','CO_km','Aumentos_UF','Otros_CO','Comentario'];
   const lines = [headers.join(';')];
   agruparVisitas(rows).forEach(v => {{
     lines.push([
-      v.dia, v.veterinario, v.sede, v.empresa, v.centro||'', v.programa,
+      v.dia, v.veterinario, v.sede, v.empresa, v.centro||'', v.programa, textoCasos(v.casos),
       Number(v.n)||0,
       Math.round(Number(v.venta_clp)||0),
       Math.round(Number(v.costo_operativo_clp)||0),
       Math.round(Number(v.co_km)||0),
       (Number(v.co_uf)||0).toFixed(2).replace('.', ','),
-      Math.round(Number(v.co_otros)||0)
+      Math.round(Number(v.co_otros)||0),
+      faltaOperativo(v.co_km, v.co_uf, v.co_otros, v.programa) ? 'OPERATIVO NO INGRESADO' : ''
     ].map(v => {{
       const s = String(v ?? '');
       return /[;"\\n]/.test(s) ? `"${{s.replace(/"/g,'""')}}"` : s;
@@ -1598,7 +1725,7 @@ function downloadCalExcel() {{
   }});
   const totN = rows.reduce((a,r)=>a+(Number(r.n)||0),0);
   const co = sumarCostos(rows);
-  lines.push(['TOTAL','','','','','', totN, Math.round(sum(rows)), Math.round(sum(rows,'costo_operativo_clp')), Math.round(co.km), (Number(co.uf)||0).toFixed(2).replace('.', ','), Math.round(co.otros)].join(';'));
+  lines.push(['TOTAL','','','','','','', totN, Math.round(sum(rows)), Math.round(sum(rows,'costo_operativo_clp')), Math.round(co.km), (Number(co.uf)||0).toFixed(2).replace('.', ','), Math.round(co.otros), ''].join(';'));
   const bom = '\\uFEFF';
   const blob = new Blob([bom + lines.join('\\r\\n')], {{ type: 'text/csv;charset=utf-8;' }});
   const anio = document.getElementById('cal-anio').value;
@@ -1718,6 +1845,13 @@ document.getElementById('btn-excel-cal').addEventListener('click', downloadCalEx
 document.getElementById('btn-excel-cal-resumen').addEventListener('click', downloadCalResumenExcel);
 ['cal-resumen-anio','cal-resumen-mes','cal-resumen-programa'].forEach(id => {{
   document.getElementById(id).addEventListener('change', renderCalResumen);
+}});
+['cal-tabla-anio','cal-tabla-mes','cal-tabla-empresa','cal-tabla-programa'].forEach(id => {{
+  document.getElementById(id).addEventListener('change', () => {{
+    if (id === 'cal-tabla-mes') calTablaMesManual = true;
+    if (id === 'cal-tabla-anio') calTablaAnioManual = true;
+    renderCalTable();
+  }});
 }});
 ['cal-anio','cal-mes','cal-ocultar-na'].forEach(id => {{
   document.getElementById(id).addEventListener('change', () => {{
