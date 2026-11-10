@@ -645,7 +645,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
           <table id="cal-table">
             <thead>
               <tr>
-                <th>Día</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centro</th><th>Programas</th><th>Casos</th>
+                <th>Día</th><th>Veterinario</th><th>Sede</th><th>Empresa</th><th>Centros</th><th>Programas</th><th>Casos</th>
                 <th class="num">N</th><th class="num">Venta $</th><th class="num">Costo operativo $</th>
                 <th class="num">CO km</th><th class="num">Aumentos UF</th><th class="num">Otros CO $</th>
                 <th>Comentario</th>
@@ -724,7 +724,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li>Los filtros del calendario (veterinario, cliente/empresa, sede, programa) son multi-selección: vacío = todos.</li>
         <li><strong>Buscar por caso</strong> usa <code>caso_adlab</code>. Cada caso tiene un día de muestreo. Al encontrarlo se lista <strong>todo lo realizado ese día</strong> (sin recortar por veterinario, cliente, sede ni programa). La fila resaltada es la combinación del caso. Acepta el código completo (<code>PM-170523</code>) o solo el número.</li>
         <li>Al hacer clic en un día se arma el resumen del día sumando N, venta $ y costo operativo $ por veterinario, con el id de caso (<code>caso_adlab</code>) en el resumen y en el detalle por centro.</li>
-        <li>La <strong>tabla del mes</strong> lista casos como el resumen del día. Ahí puedes marcar varios años, meses, empresas y programas, sin cambiar el calendario de arriba. El Excel exporta ese mismo detalle.</li>
+        <li>La <strong>tabla del mes</strong> lista casos como el resumen del día. Ahí puedes marcar varios años, meses, empresas y programas, sin cambiar el calendario de arriba. Los centros del mismo día y veterinario con el mismo CO cargado salen en una sola fila y ese CO se cuenta una vez. El Excel exporta ese mismo detalle.</li>
         <li>La tabla <strong>Resumen por empresa y sede</strong> se filtra por año(s), mes(es) y programa(s) a elección: empresa, sede, días distintos de muestreo y costo operativo en UF.</li>
       </ul>
 
@@ -1170,11 +1170,58 @@ function textoCasos(ids) {{
   return list.join(', ');
 }}
 
+function firmaCo(c) {{
+  const n = x => String(Math.round((Number(x) || 0) * 10000));
+  return [n(c.co_km), n(c.co_uf), n(c.co_otros)].join('|');
+}}
+function agruparTablaMes(rows) {{
+  const map = new Map();
+  const order = [];
+  (rows || []).forEach(r => {{
+    const c = costoDeFila(r);
+    const k = [r.dia, String(r.veterinario || '').trim().toUpperCase(), firmaCo(c)].join('\\t');
+    let g = map.get(k);
+    if (!g) {{
+      g = {{
+        dia: r.dia, veterinario: r.veterinario,
+        sedes: [], empresas: [], centros: [], programas: [], casos: [],
+        n: 0, venta_clp: 0, costo_operativo_clp: 0,
+        co_km: Number(c.co_km) || 0, co_uf: Number(c.co_uf) || 0, co_otros: Number(c.co_otros) || 0
+      }};
+      map.set(k, g);
+      order.push(g);
+    }}
+    g.sedes.push(r.sede);
+    g.empresas.push(r.empresa);
+    g.centros.push(r.centro || '');
+    g.programas.push(r.programa);
+    casosDeFila(r.dia, r).forEach(id => g.casos.push(id));
+    g.n += Number(r.n) || 0;
+    g.venta_clp += Number(r.venta_clp) || 0;
+    g.costo_operativo_clp += Number(r.costo_operativo_clp) || 0;
+  }});
+  return order.map(g => ({{
+    dia: g.dia, veterinario: g.veterinario,
+    sede: unirLista(g.sedes), empresa: unirLista(g.empresas), centro: unirLista(g.centros),
+    programa: unirLista(g.programas), casos: g.casos,
+    n: g.n, venta_clp: g.venta_clp, costo_operativo_clp: g.costo_operativo_clp,
+    co_km: g.co_km, co_uf: g.co_uf, co_otros: g.co_otros
+  }}));
+}}
+function costosTablaMes(visitas) {{
+  return (visitas || []).reduce((a, v) => {{
+    a.km += Number(v.co_km) || 0;
+    a.uf += Number(v.co_uf) || 0;
+    a.otros += Number(v.co_otros) || 0;
+    return a;
+  }}, {{ km: 0, uf: 0, otros: 0 }});
+}}
+
 function renderCalTable() {{
   const rows = rowsTablaMes();
   calTableRows = rows;
-  const visitas = agruparVisitas(rows);
-  const co = sumarCostos(rows);
+  const visitas = agruparTablaMes(rows);
+  const co = costosTablaMes(visitas);
   const anios = selectedMulti('cal-tabla-anio');
   const meses = selectedMulti('cal-tabla-mes');
   const empresas = selectedMulti('cal-tabla-empresa');
@@ -1706,9 +1753,10 @@ function csvNum(n) {{
 function downloadCalExcel() {{
   const rows = calTableRows;
   if (!rows.length) {{ alert('No hay filas para exportar con el filtro actual.'); return; }}
-  const headers = ['Dia','Veterinario','Sede','Empresa','Centro','Programa','Casos','N','Venta_CLP','Costo_Operativo_CLP','CO_km','Aumentos_UF','Otros_CO','Comentario'];
+  const headers = ['Dia','Veterinario','Sede','Empresa','Centros','Programa','Casos','N','Venta_CLP','Costo_Operativo_CLP','CO_km','Aumentos_UF','Otros_CO','Comentario'];
   const lines = [headers.join(';')];
-  agruparVisitas(rows).forEach(v => {{
+  const visitas = agruparTablaMes(rows);
+  visitas.forEach(v => {{
     lines.push([
       v.dia, v.veterinario, v.sede, v.empresa, v.centro||'', v.programa, textoCasos(v.casos),
       Number(v.n)||0,
@@ -1724,7 +1772,7 @@ function downloadCalExcel() {{
     }}).join(';'));
   }});
   const totN = rows.reduce((a,r)=>a+(Number(r.n)||0),0);
-  const co = sumarCostos(rows);
+  const co = costosTablaMes(visitas);
   lines.push(['TOTAL','','','','','','', totN, Math.round(sum(rows)), Math.round(sum(rows,'costo_operativo_clp')), Math.round(co.km), (Number(co.uf)||0).toFixed(2).replace('.', ','), Math.round(co.otros), ''].join(';'));
   const bom = '\\uFEFF';
   const blob = new Blob([bom + lines.join('\\r\\n')], {{ type: 'text/csv;charset=utf-8;' }});
