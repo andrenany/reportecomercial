@@ -7,6 +7,8 @@ const ADL_USERS = {
   gleiva: "f439cabbbb7f9810b170436b96ceacd56fcb21fb2c231703c918f282da460ed5",
   admin: "9a8b7448d1d6460e5785fd2de0550d1b1e320a763d5196a106b688929a12af03",
   pve: "9b6e87a73b9ccd9b31fa282fe9340ac3d5a76ea1b112c8d962b07ddfcd9c66ab",
+  pveaysen: "aaf04b18ddf583b1ae12d45b0818e34b07211bf2f0707ba3bd9ac5809fb362f8",
+  pvevillarrica: "2b7b82d7ed6ace8c719365c027543a7872183b87602831f09142a89b0cea19ef",
 };
 
 /** Roles: full = todo el dashboard; calendario = solo calendario veterinarios */
@@ -15,6 +17,14 @@ const ADL_ROLES = {
   gleiva: "full",
   admin: "full",
   pve: "calendario",
+  pveaysen: "calendario",
+  pvevillarrica: "calendario",
+};
+
+/** Sedes que puede ver el usuario. Sin entrada = todas. */
+const ADL_SEDES = {
+  pveaysen: ["AYSEN"],
+  pvevillarrica: ["VILLARRICA"],
 };
 
 const ADL_HOME = {
@@ -41,6 +51,33 @@ function adlRole() {
   const s = adlSession();
   if (!s || !s.user) return null;
   return s.role || ADL_ROLES[s.user] || "full";
+}
+
+function adlSedes() {
+  const s = adlSession();
+  if (!s || !s.user) return null;
+  const list = ADL_SEDES[s.user];
+  return list && list.length ? list : null;
+}
+
+function adlSedeLabel() {
+  const sedes = adlSedes();
+  if (!sedes) return "";
+  const nombres = { AYSEN: "Aysén", VILLARRICA: "Villarrica", "PUERTO MONTT": "Puerto Montt" };
+  return sedes.map((s) => nombres[s] || s).join(", ");
+}
+
+/** Deja en el calendario solo la sede del usuario, antes de armar las tablas. */
+function adlAplicarSede() {
+  const sedes = adlSedes();
+  if (!sedes || typeof RAW === "undefined" || !RAW) return;
+  const ok = new Set(sedes.map((s) => String(s).trim().toUpperCase()));
+  const match = (s) => ok.has(String(s || "").trim().toUpperCase());
+  if (Array.isArray(RAW.calendario)) RAW.calendario = RAW.calendario.filter((r) => match(r.sede));
+  if (Array.isArray(RAW.casos)) RAW.casos = RAW.casos.filter((r) => match(r.sede));
+  const box = document.getElementById("cal-sede");
+  const label = box && box.closest("label");
+  if (label) label.style.display = "none";
 }
 
 function adlHomeFor(role) {
@@ -126,7 +163,12 @@ function adlApplyCalendarioOnly() {
   const sub = document.querySelector(".subhead h2");
   if (sub) sub.textContent = "Calendario veterinarios";
   const subp = document.querySelector(".subhead p");
-  if (subp) subp.textContent = "Acceso PVE · calendario y reglas (solo lectura)";
+  if (subp) {
+    const sede = adlSedeLabel();
+    subp.textContent = sede
+      ? "Acceso PVE · " + sede + " · calendario y reglas (solo lectura)"
+      : "Acceso PVE · calendario y reglas (solo lectura)";
+  }
 }
 
 adlRequireLogin();

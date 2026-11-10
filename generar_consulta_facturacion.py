@@ -700,17 +700,31 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
       <h4>Qué muestra el calendario</h4>
       <ul>
         <li>Se agrupa por <strong>fecha de muestreo</strong> (<code>fecha_muestreo</code>), no por fecha de recepción ni de factura.</li>
-        <li>Por cada día se listan <strong>veterinario</strong>, <strong>sede</strong> (lugar de análisis), <strong>empresa</strong>, <strong>centro</strong> y <strong>programa</strong>.</li>
-        <li><strong>Costo operativo $</strong> = solo filas cuya sección es <strong>“Costo Operativo”</strong>, convertidas a pesos (UF × UF del día). Es lo facturado, no lo ingresado en la planilla.</li>
-        <li><strong>CO km</strong>, <strong>Aumentos UF</strong> y <strong>Otros CO $</strong> salen de <strong>dbo.vw_atv_planilla_detalles</strong>. El cruce con FVivaldi es por <strong>fecha de muestreo + veterinario + empresa de servicio + centro</strong> (<code>empresa_servicio</code> = <code>nombre_empresaservicios</code>, <code>centro</code> = <code>nombre_centro</code>).</li>
-        <li><strong>CO km</strong> = <code>co_km</code>, en kilómetros, sin signo peso.</li>
-        <li><strong>Aumentos UF</strong> = <code>co_extra + co_veterinario</code>. Esos dos vienen en UF, no en pesos.</li>
-        <li><strong>Otros CO $</strong> = <code>co_peaje + co_transbordador + co_taxi + co_pasaje + co_colacion + co_alojamiento</code>, en pesos tal como se ingresaron, sin multiplicar por la UF. No incluye <code>ga_vehiculo</code>, <code>ga_consumo</code> ni el texto <code>otros</code>.</li>
-        <li>Esos costos son de la visita. Si el mismo día, veterinario, empresa y centro tiene varios programas, salen <strong>todos en la misma fila</strong> y se muestran una sola vez.</li>
-        <li>Si en la planilla <strong>todos los co_</strong> de esa visita están en 0 (o no hay fila), la visita se marca con <strong>OPERATIVO NO INGRESADO</strong>. Los programas de <strong>screening</strong> no llevan esa alerta.</li>
-        <li><strong>Costo operativo UF</strong> = las mismas filas de “Costo Operativo”, en UF (<code>fac_vtatotal</code>, sin multiplicar por el valor UF del día).</li>
-        <li><strong>Venta $</strong> = suma de todas las filas del grupo: <code>fac_vtatotal × fac_uf</code> (UF de la línea × valor UF del día).</li>
-        <li>Datos de calendario cargados desde <strong>2024 en adelante</strong>.</li>
+        <li>La grilla del mes muestra empresas, programas y el <strong>costo operativo facturado</strong> del día. No muestra CO km, aumentos UF ni otros CO: esos costos van solo en las tablas.</li>
+        <li>Los indicadores de arriba son días con muestreo, registros, venta $ y costo operativo $. Datos desde <strong>2024 en adelante</strong>.</li>
+      </ul>
+
+      <h4>Costos</h4>
+      <ul>
+        <li><strong>Venta $</strong> = todas las filas del grupo: <code>fac_vtatotal × fac_uf</code> (UF de la línea × valor UF del día).</li>
+        <li><strong>Costo operativo $</strong> = solo la sección <strong>“Costo Operativo”</strong>, en pesos (<code>fac_vtatotal × fac_uf</code>). Es lo facturado, no lo ingresado en la planilla.</li>
+        <li><strong>Costo operativo UF</strong> = esa misma sección, en UF (<code>fac_vtatotal</code>, sin multiplicar por el valor UF del día). Se usa en el resumen por empresa y sede.</li>
+        <li><strong>CO km</strong>, <strong>Aumentos UF</strong> y <strong>Otros CO $</strong> salen de <strong>dbo.vw_atv_planilla_detalles</strong>. El cruce es <strong>fecha de muestreo + veterinario + empresa de servicio + centro</strong> (<code>empresa_servicio</code> = <code>nombre_empresaservicios</code>, <code>centro</code> = <code>nombre_centro</code>).</li>
+        <li><strong>CO km</strong> = <code>co_km</code>. Son kilómetros, sin signo peso.</li>
+        <li><strong>Aumentos UF</strong> = <code>co_extra + co_veterinario</code>. Esos dos campos vienen en UF.</li>
+        <li><strong>Otros CO $</strong> = <code>co_peaje + co_transbordador + co_taxi + co_pasaje + co_colacion + co_alojamiento</code>. Pesos tal como se ingresaron, sin multiplicar por la UF. No entran <code>ga_vehiculo</code>, <code>ga_consumo</code> ni el texto <code>otros</code>.</li>
+        <li>El operativo es de la visita (día + veterinario + empresa + centro). Si esa visita tiene varios programas, van <strong>en la misma fila</strong> y el CO se muestra una sola vez.</li>
+        <li>Si todos los <code>co_</code> de la visita están en 0, o no hay fila en la planilla, el comentario es <strong>OPERATIVO NO INGRESADO</strong>. No se marca cuando <strong>todos</strong> los programas de la fila son screening. Si hay screening mezclado con otro programa y ese otro no tiene costos, la alerta se mantiene.</li>
+      </ul>
+
+      <h4>Dónde se ven los costos</h4>
+      <ul>
+        <li><strong>Resumen del día:</strong> una fila por veterinario. Junta sedes, empresas, centros, programas y casos. El CO es la suma de cada visita de ese veterinario, contada una vez.</li>
+        <li><strong>Detalle por centro:</strong> una fila por visita (día + veterinario + empresa + centro), con sus programas juntos.</li>
+        <li><strong>Tabla del mes:</strong> lista los casos igual que el resumen del día. Puedes marcar varios años, meses, empresas y programas; el calendario de arriba sigue en un solo mes. Si no marcas año o mes, parte del año y mes del calendario. Si no marcas empresa o programa, usa el filtro de arriba.</li>
+        <li>En esa tabla, los centros del <strong>mismo día y mismo veterinario</strong> se unen cuando el CO cargado es el mismo (mismos km, mismos aumentos UF y mismos otros CO). Los centros, empresas y programas quedan en la fila y ese CO se cuenta <strong>una vez</strong>. La venta $ y el costo operativo $ sí se suman. Si el CO es distinto, cada centro sigue en su fila.</li>
+        <li>El Excel de la tabla del mes exporta ese mismo detalle, con casos, comentario y centros unidos.</li>
+        <li><strong>Resumen por empresa y sede:</strong> días distintos de muestreo, costo operativo en UF, CO km, aumentos UF y otros CO. Se filtra por año, mes y programa, y respeta veterinario, cliente y sede de arriba.</li>
       </ul>
 
       <h4>Cómo se hace el match / cruce</h4>
@@ -722,23 +736,28 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li><strong>Centro</strong> ← <code>nombre_centro</code>.</li>
         <li><strong>Programa</strong> ← <code>nombre_programa</code>.</li>
         <li>Los filtros del calendario (veterinario, cliente/empresa, sede, programa) son multi-selección: vacío = todos.</li>
-        <li><strong>Buscar por caso</strong> usa <code>caso_adlab</code>. Cada caso tiene un día de muestreo. Al encontrarlo se lista <strong>todo lo realizado ese día</strong> (sin recortar por veterinario, cliente, sede ni programa). La fila resaltada es la combinación del caso. Acepta el código completo (<code>PM-170523</code>) o solo el número.</li>
-        <li>Al hacer clic en un día se arma el resumen del día sumando N, venta $ y costo operativo $ por veterinario, con el id de caso (<code>caso_adlab</code>) en el resumen y en el detalle por centro.</li>
-        <li>La <strong>tabla del mes</strong> lista casos como el resumen del día. Ahí puedes marcar varios años, meses, empresas y programas, sin cambiar el calendario de arriba. Los centros del mismo día y veterinario con el mismo CO cargado salen en una sola fila y ese CO se cuenta una vez. El Excel exporta ese mismo detalle.</li>
-        <li>La tabla <strong>Resumen por empresa y sede</strong> se filtra por año(s), mes(es) y programa(s) a elección: empresa, sede, días distintos de muestreo y costo operativo en UF.</li>
+        <li><strong>Buscar por caso</strong> usa <code>caso_adlab</code>. Cada caso tiene un día de muestreo. Al encontrarlo se lista <strong>todo lo realizado ese día</strong> (sin recortar por veterinario, cliente ni programa). La fila resaltada es la combinación del caso. Acepta el código completo (<code>PM-170523</code>) o solo el número.</li>
+        <li>Al hacer clic en un día se abre el resumen de ese día. <strong>Buscar por caso</strong> lleva al día de muestreo del caso y resalta su visita.</li>
+      </ul>
+
+      <h4>Acceso PVE por sede</h4>
+      <ul>
+        <li><strong>pve</strong> entra a la vista PVE (calendario y reglas) y ve <strong>todas</strong> las sedes: Puerto Montt, Aysén y Villarrica.</li>
+        <li><strong>pveaysen</strong> entra a la misma vista PVE y solo ve la sede <strong>Aysén</strong>. El calendario, el resumen del día, el detalle por centro, la tabla del mes, el resumen por empresa y la búsqueda por caso quedan recortados a Aysén. No puede cambiar la sede.</li>
+        <li><strong>pvevillarrica</strong> entra a la misma vista PVE y solo ve la sede <strong>Villarrica</strong>, con el mismo recorte. No puede cambiar la sede.</li>
       </ul>
 
       <h4>Qué NO incluye este calendario</h4>
       <ul>
         <li>No incluye días de <strong>vuelo</strong>.</li>
-        <li>No incluye <strong>hospedaje</strong>.</li>
+        <li>No incluye días de <strong>hospedaje</strong> como actividad. El monto <code>co_alojamiento</code> de la planilla sí entra en Otros CO $.</li>
         <li>No incluye <strong>puerto cerrado</strong>.</li>
         <li>No incluye días de <strong>muestreo de calidad</strong>.</li>
       </ul>
       <div class="warn">
         Este calendario refleja actividad de muestreo operativo registrada en FVivaldi (Web Salud).
-        Los conceptos de vuelo, hospedaje, puerto cerrado y muestreo de calidad quedan fuera del alcance de esta hoja;
-        no deben usarse estos totales para esos ítems.
+        No lista días de vuelo, hospedaje, puerto cerrado ni muestreo de calidad.
+        El monto de alojamiento ingresado en la planilla (<code>co_alojamiento</code>) sí queda dentro de Otros CO $.
       </div>
     </div>
   </div>
@@ -1913,6 +1932,7 @@ fillFilters();
   document.getElementById(id).addEventListener('change', renderAnalisis);
 }});
 renderAnalisis();
+if (typeof adlAplicarSede === 'function') adlAplicarSede();
 refreshCal();
 ['cal-vet','cal-cliente','cal-sede','cal-programa'].forEach(id => {{
   document.getElementById(id).addEventListener('change', renderCalendario);

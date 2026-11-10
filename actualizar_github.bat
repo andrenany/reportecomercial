@@ -6,21 +6,36 @@ set PYTHONUTF8=1
 title ADL - Actualizar GitHub
 
 echo ========================================
-echo  Regenerar reportes y subir a GitHub
+echo  Regenerar todo y subir a GitHub
 echo ========================================
 echo.
-echo  Incluye:
-echo   - Dashboard unificado + Solo facturacion + Reglas ^(Excel red^)
-echo   - Consulta facturacion / calendario vet ^(SQL FVivaldi^)
-echo   - Resumen cantidad + proyeccion Prophet ^(SQL FVivaldi^)
+echo  Se actualiza la informacion y el codigo:
+echo   - Dashboard unificado, Solo facturacion, Reglas y fotos de pendiente
+echo   - Consulta facturacion: serie, casos, facturas y calendario veterinario
+echo     ^(planilla: CO km, aumentos UF, otros CO y tabla del mes^)
+echo   - Resumen cantidad y proyeccion Prophet
 echo.
-echo  NO sube: credenciales.env ^(esta en .gitignore^)
+echo  No sube: credenciales.env ni temporales de Excel ^(~$^)
 echo.
 
 where python >nul 2>&1
 if errorlevel 1 (set "PY=py -3") else (set "PY=python")
 
-echo 1^) Generando dashboards desde Excel de red...
+echo 0^) Trayendo lo ultimo de GitHub...
+git status --porcelain | findstr /r "." >nul
+if errorlevel 1 (
+  git pull --rebase origin main
+  if errorlevel 1 (
+    echo ERROR al traer cambios de GitHub.
+    pause
+    exit /b 1
+  )
+) else (
+  echo    Hay cambios locales. Se regenera encima y se sube todo junto.
+)
+
+echo.
+echo 1^) Dashboards desde Excel de red...
 %PY% -u generar_dashboard.py
 if errorlevel 1 (
   echo ERROR al generar dashboards Excel.
@@ -29,43 +44,45 @@ if errorlevel 1 (
 )
 
 echo.
-echo 2^) Generando reportes SQL ^(vw_FVivaldiWebSalud^)...
+echo 2^) Reportes SQL ^(FVivaldi y planilla de costos^)...
 if not exist "credenciales.env" (
-  echo AVISO: no esta credenciales.env — se omiten consulta y resumen cantidad.
-  echo         Copia/crea credenciales.env en esta carpeta para regenerarlos.
-) else (
-  echo    Consulta facturacion / calendario vet...
-  %PY% -u generar_consulta_facturacion.py
-  if errorlevel 1 (
-    echo ERROR al generar consulta_facturacion.html ^(SQL^).
-    echo Revisa red / credenciales.env / driver ODBC SQL Server.
-    pause
-    exit /b 1
-  )
-  echo    Resumen cantidad + proyeccion Prophet...
-  %PY% -u generar_resumen_cantidad.py
-  if errorlevel 1 (
-    echo ERROR al generar resumen_cantidad.html ^(SQL / Prophet^).
-    echo Revisa red / credenciales.env / Prophet.
-    pause
-    exit /b 1
-  )
+  echo ERROR: falta credenciales.env en esta carpeta.
+  echo Sin ese archivo no se actualiza consulta ni resumen cantidad.
+  pause
+  exit /b 1
+)
+echo    Consulta facturacion / calendario veterinario...
+%PY% -u generar_consulta_facturacion.py
+if errorlevel 1 (
+  echo ERROR al generar consulta_facturacion.html ^(SQL^).
+  echo Revisa red / credenciales.env / driver ODBC SQL Server.
+  pause
+  exit /b 1
+)
+echo    Resumen cantidad + proyeccion Prophet...
+%PY% -u generar_resumen_cantidad.py
+if errorlevel 1 (
+  echo ERROR al generar resumen_cantidad.html ^(SQL / Prophet^).
+  echo Revisa red / credenciales.env / Prophet.
+  pause
+  exit /b 1
 )
 
 echo.
-echo 3^) Preparando commit ^(sin secretos^)...
+echo 3^) Preparando commit ^(sin secretos ni temporales^)...
 git add -A
-git reset HEAD -- credenciales.env 2>nul
+git reset HEAD -- credenciales.env sql_config.local.json .env 2>nul
+for /f "delims=" %%F in ('git ls-files "*~$*"') do git rm --cached --ignore-unmatch -- "%%F"
 git status --short
 
 git diff --cached --quiet
 if %errorlevel%==0 (
-  echo No hay cambios para subir.
+  echo No hay cambios para subir. La informacion regenerada ya estaba al dia.
   pause
   exit /b 0
 )
 
-git commit -m "Actualiza dashboards, consulta SQL, resumen cantidad y proyeccion"
+git commit -m "Actualiza dashboards, consulta de facturacion con calendario y planilla, y resumen cantidad"
 if errorlevel 1 (
   echo ERROR en commit.
   pause
