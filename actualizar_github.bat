@@ -52,6 +52,7 @@ if not exist "credenciales.env" (
   exit /b 1
 )
 echo    Consulta facturacion / calendario veterinario...
+echo    Si alertas_correo.env tiene correos, avisa el operativo no ingresado del mes.
 %PY% -u generar_consulta_facturacion.py
 if errorlevel 1 (
   echo ERROR al generar consulta_facturacion.html ^(SQL^).

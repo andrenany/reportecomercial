@@ -745,6 +745,7 @@ footer {{ text-align:center; color:var(--muted); font-size:.78rem; padding:16px;
         <li><strong>pve</strong> entra a la vista PVE (calendario y reglas) y ve <strong>todas</strong> las sedes: Puerto Montt, Aysén y Villarrica.</li>
         <li><strong>pveaysen</strong> entra a la misma vista PVE y solo ve la sede <strong>Aysén</strong>. El calendario, el resumen del día, el detalle por centro, la tabla del mes, el resumen por empresa y la búsqueda por caso quedan recortados a Aysén. No puede cambiar la sede.</li>
         <li><strong>pvevillarrica</strong> entra a la misma vista PVE y solo ve la sede <strong>Villarrica</strong>, con el mismo recorte. No puede cambiar la sede.</li>
+        <li>Al regenerar este reporte se envía un correo por sede con las visitas del mes, hasta hoy, marcadas <strong>OPERATIVO NO INGRESADO</strong>. El screening puro no entra. Cada sede recibe solo lo suyo. Los correos están en <code>alertas_correo.env</code> y no se publican. Si el listado no cambió, no se reenvía.</li>
       </ul>
 
       <h4>Qué NO incluye este calendario</h4>
@@ -1967,6 +1968,11 @@ def main() -> None:
     print(f"  Serie: {len(datos['serie']):,} grupos · Calendario: {len(datos['calendario']):,} filas · Casos: {len(datos['casos']):,} · Facturas: {len(datos['facturas']):,} · Costos planilla: {len(datos['costos']):,}")
     k = datos["kpis"]
     print(f"  Venta CLP facturada: ${k.get('venta_clp_facturada') or 0:,.0f}")
+    try:
+        from enviar_alertas_operativo import enviar_alertas
+        enviar_alertas(datos["calendario"], datos["costos"])
+    except Exception as exc:
+        print(f"AVISO: las alertas por correo no se enviaron: {exc}")
 
 
 if __name__ == "__main__":

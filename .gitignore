@@ -2,6 +2,8 @@
 sql_config.local.json
 credenciales.env
 usuarios.txt
+alertas_correo.env
+alertas_correo_estado.json
 .env
 .env.*
 
